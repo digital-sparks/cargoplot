@@ -1,0 +1,40 @@
+{
+  "name": "simple-starter-template",
+  "version": "1.0.1",
+  "description": "",
+  "main": "src/home.js",
+  "scripts": {
+    "dev": "cross-env NODE_ENV=development node ./bin/build.js",
+    "build": "cross-env NODE_ENV=production node ./bin/build.js",
+    "lint": "eslint --ignore-path .gitignore ./src && prettier --check ./src",
+    "lint:fix": "eslint --ignore-path .gitignore ./src --fix",
+    "format": "prettier --write ./src",
+    "release": "changeset publish",
+    "update": "pnpm update -i -L -r"
+  },
+  "keywords": [],
+  "author": {
+    "name": "Digital Sparks",
+    "url": "https://digital-sparks.com/"
+  },
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "license": "ISC",
+  "devDependencies": {
+    "@changesets/changelog-git": "^0.2.1",
+    "@changesets/cli": "^2.29.2",
+    "cross-env": "^7.0.3",
+    "esbuild": "^0.19.10",
+    "eslint": "^9.25.1",
+    "eslint-config-prettier": "^10.1.2",
+    "eslint-plugin-prettier": "^5.2.6",
+    "eslint-plugin-simple-import-sort": "^12.1.1",
+    "prettier": "^3.5.3"
+  },
+  "dependencies": {
+    "gsap": "^3.13.0",
+    "swiper": "^11.2.6"
+  }
+}
