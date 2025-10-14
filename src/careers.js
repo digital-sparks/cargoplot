@@ -12,19 +12,23 @@ import {
   Keyboard,
   Mousewheel,
   A11y,
+  EffectFade,
 } from 'swiper/modules';
 
 window.Webflow ||= [];
 window.Webflow.push(() => {
   console.log('hello');
 
-  const cardLinkCarousel = new Swiper('.swiper-card-link_wrapper', {
-    modules: [Autoplay, Navigation, Pagination, Scrollbar, Keyboard, Mousewheel, A11y],
-    wrapperClass: 'swiper-card-link_list',
-    slideClass: 'swiper-card-link_slide',
+  const testimonialCarousel = new Swiper('.swiper-testimonial_wrapper', {
+    modules: [Autoplay, Navigation, Pagination, Scrollbar, Keyboard, Mousewheel, A11y, EffectFade],
+    wrapperClass: 'swiper-testimonial_list',
+    slideClass: 'swiper-testimonial_slide',
+    effect: 'fade',
+    fadeEffect: {
+      crossFade: true,
+    },
     slidesPerView: 'auto',
     speed: 400,
-    spaceBetween: 24,
     a11y: true,
     grabCursor: true,
     autoplay: false,
@@ -36,16 +40,13 @@ window.Webflow.push(() => {
       prevEl: '.swiper_button.is-prev',
       nextEl: '.swiper_button.is-next',
     },
-    scrollbar: {
-      el: '.swiper_scrollbar',
-      dragClass: 'swiper_scrollbar-drag',
-      draggable: true,
+    pagination: {
+      el: '.swiper_pagination',
+      bulletClass: 'swiper_pagination-bullet',
+      bulletActiveClass: 'is-active',
+      clickable: true,
+      type: 'bullets',
     },
     breakpoints: {},
-    on: {
-      beforeInit: function () {
-        this.wrapperEl.style.columnGap = 'unset';
-      },
-    },
   });
 });
