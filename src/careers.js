@@ -27,7 +27,7 @@ window.Webflow.push(() => {
     fadeEffect: {
       crossFade: true,
     },
-    slidesPerView: 'auto',
+    slidesPerView: 1,
     speed: 400,
     a11y: true,
     grabCursor: true,
