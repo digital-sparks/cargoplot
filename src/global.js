@@ -43,7 +43,8 @@ window.Webflow.push(() => {
           },
 
           onFormSubmit: (hubspotForm, data) => {
-            toggleElements(form, 'none');
+            console.log('form submit');
+            form.style.display = 'none';
             toggleElements('[data-element="hubspot-hide"]', 'none');
             toggleElements('[data-element="hubspot-show"]', 'block');
 

@@ -4,6 +4,4 @@ import { SplitText } from 'gsap/SplitText';
 gsap.registerPlugin(Observer, SplitText);
 
 window.Webflow ||= [];
-window.Webflow.push(() => {
-  console.log('hello');
-});
+window.Webflow.push(() => {});
