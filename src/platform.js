@@ -16,8 +16,6 @@ import {
 
 window.Webflow ||= [];
 window.Webflow.push(() => {
-  console.log('hello');
-
   const cardLinkCarousel = new Swiper('.swiper-card-link_wrapper', {
     modules: [Autoplay, Navigation, Pagination, Scrollbar, Keyboard, Mousewheel, A11y],
     wrapperClass: 'swiper-card-link_list',

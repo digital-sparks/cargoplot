@@ -1,18 +1,11 @@
-import { gsap } from 'gsap';
-import { Observer } from 'gsap/Observer';
-import { SplitText } from 'gsap/SplitText';
-gsap.registerPlugin(Observer, SplitText);
-
 window.Webflow ||= [];
 window.Webflow.push(() => {
-  console.log('hello');
-
   /* HUBSPOT FORMS */
 
   if (document.querySelectorAll('[data-element=hubspot-form]').length) {
-    // Function to toggle element visibility
-    const toggleElements = (selector, display) => {
-      document.querySelectorAll(selector).forEach((el) => {
+    // Function to toggle element visibility within a specific scope
+    const toggleElements = (selector, display, scope = document) => {
+      scope.querySelectorAll(selector).forEach((el) => {
         el.style.display = display;
       });
     };
@@ -40,13 +33,17 @@ window.Webflow.push(() => {
 
           onFormReady: (hubspotForm, data) => {
             // ScrollTrigger.refresh(); // uncomment if site uses GSAP ScrollTrigger
+            const wfIx = Webflow.require('ix3');
+            wfIx.emit('hubspot_form_loaded');
           },
 
           onFormSubmit: (hubspotForm, data) => {
-            console.log('form submit');
             form.style.display = 'none';
-            toggleElements('[data-element="hubspot-hide"]', 'none');
-            toggleElements('[data-element="hubspot-show"]', 'block');
+
+            // Only affect siblings within the form's parent container
+            const parentContainer = form.parentElement;
+            toggleElements('[data-element="hubspot-hide"]', 'none', parentContainer);
+            toggleElements('[data-element="hubspot-show"]', 'block', parentContainer);
 
             // ScrollTrigger.refresh(); // uncomment if site uses GSAP ScrollTrigger
           },

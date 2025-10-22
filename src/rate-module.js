@@ -9,7 +9,7 @@ import 'air-datepicker/air-datepicker.css';
 // ============================================================================
 
 // Test Mode - Set to true to enable detailed console logging
-const TEST_MODE = true;
+const TEST_MODE = false;
 
 // Google Maps API Configuration
 const GOOGLE_MAPS_API_KEY = 'AIzaSyA3LzIwr4sbLguFgF02W7QguXG1Y2wv7fQ';
@@ -17,8 +17,8 @@ const GOOGLE_MAPS_LIBRARIES = 'places';
 const GOOGLE_MAPS_VERSION = 'beta';
 
 // Search Configuration
-const MIN_SEARCH_CHARACTERS = 1;
-const SEARCH_DEBOUNCE_MS = 100;
+const MIN_SEARCH_CHARACTERS = 2;
+const SEARCH_DEBOUNCE_MS = 300;
 
 // Date Configuration
 const DATE_DISPLAY_FORMAT = 'dd-MM-yyyy'; // User-friendly format
@@ -161,7 +161,7 @@ function dateToISO(date) {
 function showError(element) {
   if (!element) return;
   element.classList.add(SELECTORS.errorClass);
-  const errorElement = element.parentElement?.querySelector(SELECTORS.errorElement);
+  const errorElement = element.closest(SELECTORS.cargoField)?.querySelector(SELECTORS.errorElement);
   if (errorElement) errorElement.style.display = 'block';
 }
 
@@ -171,7 +171,7 @@ function showError(element) {
 function clearError(element) {
   if (!element) return;
   element.classList.remove(SELECTORS.errorClass);
-  const errorElement = element.parentElement?.querySelector(SELECTORS.errorElement);
+  const errorElement = element.closest(SELECTORS.cargoField)?.querySelector(SELECTORS.errorElement);
   if (errorElement) errorElement.style.display = 'none';
 }
 
@@ -411,15 +411,7 @@ window.Webflow.push(() => {
           if (index > 0) link.remove();
         });
 
-        displayResults(
-          dropdownElement,
-          template,
-          resultsArray,
-          input,
-          openDropdown,
-          closeDropdown,
-          selectedFromDropdown
-        );
+        displayResults(dropdownElement, template, resultsArray, input, openDropdown, closeDropdown);
 
         log(inputId, 'found', resultsArray.length, 'results');
 
@@ -609,7 +601,7 @@ window.Webflow.push(() => {
   function initCargoTypeDropdown() {
     const cargoSelect = document.getElementById(SELECTORS.cargoTypeSelect);
     const cargoInput = document.getElementById(SELECTORS.cargoTypeDisplay);
-    const cargoFieldContainer = cargoInput?.parentElement;
+    const cargoFieldContainer = cargoInput?.closest(SELECTORS.cargoField);
     const cargoDropdown = cargoFieldContainer?.querySelector(SELECTORS.dropdown);
 
     if (!cargoSelect || !cargoInput || !cargoDropdown) {
@@ -853,8 +845,12 @@ window.Webflow.push(() => {
 
   const originInput = document.getElementById(SELECTORS.originInput);
   const destinationInput = document.getElementById(SELECTORS.destinationInput);
-  const originDropdown = originInput?.parentElement?.querySelector(SELECTORS.dropdown);
-  const destinationDropdown = destinationInput?.parentElement?.querySelector(SELECTORS.dropdown);
+  const originDropdown = originInput
+    ?.closest(SELECTORS.cargoField)
+    ?.querySelector(SELECTORS.dropdown);
+  const destinationDropdown = destinationInput
+    ?.closest(SELECTORS.cargoField)
+    ?.querySelector(SELECTORS.dropdown);
 
   const validateOrigin =
     originInput && originDropdown
