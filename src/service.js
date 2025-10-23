@@ -3,7 +3,6 @@ window.Webflow.push(() => {
   // Configuration
   const CONFIG = {
     API_URL: 'https://app.cargoplot.com/api/bookings/sea?limit=5',
-    PROXY_URL: 'https://corsproxy.io/?', // Consider using your own CORS proxy in production
     TIMEOUT: 10000, // 10 seconds
     MAX_RETRIES: 3,
     RETRY_DELAY: 1000, // 1 second
@@ -74,11 +73,10 @@ window.Webflow.push(() => {
   async function fetchBookings(retryCount = 0) {
     try {
       const apiUrl = CONFIG.API_URL;
-      const fullUrl = CONFIG.PROXY_URL + encodeURIComponent(apiUrl);
 
       log(`Fetching bookings (attempt ${retryCount + 1}):`, apiUrl);
 
-      const response = await fetchWithTimeout(fullUrl, {
+      const response = await fetchWithTimeout(apiUrl, {
         headers: {
           Accept: 'application/json',
           'Content-Type': 'application/json',

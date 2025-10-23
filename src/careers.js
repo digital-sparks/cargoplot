@@ -1,8 +1,3 @@
-import { gsap } from 'gsap';
-import { Observer } from 'gsap/Observer';
-import { SplitText } from 'gsap/SplitText';
-gsap.registerPlugin(Observer, SplitText);
-
 import Swiper from 'swiper';
 import {
   Autoplay,
@@ -17,8 +12,6 @@ import {
 
 window.Webflow ||= [];
 window.Webflow.push(() => {
-  console.log('hello');
-
   const testimonialCarousel = new Swiper('.swiper-testimonial_wrapper', {
     modules: [Autoplay, Navigation, Pagination, Scrollbar, Keyboard, Mousewheel, A11y, EffectFade],
     wrapperClass: 'swiper-testimonial_list',

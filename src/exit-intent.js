@@ -13,8 +13,9 @@ window.Webflow.push(() => {
   const autoDisplay = exitIntent.getAttribute('element-setting-auto-display');
   const autoDisplayDelay = autoDisplay ? parseInt(autoDisplay) : null;
 
-  // Set storage key only if showOnce is true
-  const storageKey = showOnce ? `exitPopupShown_${pageUrl}` : null;
+  // Set storage key and storage type based on showOnce setting
+  const storageKey = `exitPopupShown_${pageUrl}`;
+  const storage = showOnce ? localStorage : sessionStorage;
 
   let entryTime = Date.now();
   let hasShownPopup = false;
@@ -35,8 +36,8 @@ window.Webflow.push(() => {
   }
 
   function showPopup() {
-    // Check if we should prevent showing based on storage (only if showOnce is true)
-    if (hasShownPopup || (showOnce && sessionStorage.getItem(storageKey))) return;
+    // Check if we should prevent showing based on storage
+    if (hasShownPopup || storage.getItem(storageKey)) return;
 
     exitIntent.style.display = 'flex';
     setTimeout(() => {
@@ -54,10 +55,8 @@ window.Webflow.push(() => {
 
     hasShownPopup = true;
 
-    // Only store in sessionStorage if showOnce is true
-    if (showOnce && storageKey) {
-      sessionStorage.setItem(storageKey, 'true');
-    }
+    // Store in appropriate storage (localStorage if showOnce, sessionStorage if not)
+    storage.setItem(storageKey, 'true');
   }
 
   function closePopup() {

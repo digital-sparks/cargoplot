@@ -1,22 +1,11 @@
-import { gsap } from 'gsap';
-import { ScrollTrigger } from 'gsap/ScrollTrigger';
-import { SplitText } from 'gsap/SplitText';
-
-console.log(ScrollTrigger);
+// import { gsap } from 'gsap';
+// import { ScrollTrigger } from 'gsap/ScrollTrigger';
+// import { SplitText } from 'gsap/SplitText';
 
 window.Webflow ||= [];
 window.Webflow.push(() => {
-  gsap.registerPlugin(SplitText);
-  gsap.registerPlugin(ScrollTrigger);
-
-  // ... existing code ...
-
-  // Platform component animation
-  // ... existing code ...
-
-  // ... existing code ...
-
-  // ... existing code ...
+  //   gsap.registerPlugin(SplitText);
+  //   gsap.registerPlugin(ScrollTrigger);
 
   // Platform component animation - only on desktop
   gsap.matchMedia().add('(min-width: 911px)', () => {
@@ -276,16 +265,6 @@ window.Webflow.push(() => {
 
   // ... rest of code ...
 
-  // ... rest of code ...
-
-  // ... rest of code ...
-
-  // ... existing code ...
-
-  // ... existing code ...
-
-  // ... existing code ...
-
   const targets = document.querySelectorAll('[data-element=counter]');
 
   targets.forEach((target) => {
@@ -366,7 +345,6 @@ window.Webflow.push(() => {
         target.textContent = formatValue(counter.value, parsed);
       },
       scrollTrigger: {
-        markers: true,
         trigger: target,
         start: 'top 80%', // Animation starts when element is 80% into viewport
         end: 'bottom 20%',
@@ -376,6 +354,4 @@ window.Webflow.push(() => {
       },
     });
   });
-
-  // ... rest of code ...
 });

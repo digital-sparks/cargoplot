@@ -40,7 +40,6 @@ window.Webflow.push(() => {
           onFormSubmit: (hubspotForm, data) => {
             form.style.display = 'none';
 
-            // Only affect siblings within the form's parent container
             const parentContainer = form.parentElement;
             toggleElements('[data-element="hubspot-hide"]', 'none', parentContainer);
             toggleElements('[data-element="hubspot-show"]', 'block', parentContainer);
