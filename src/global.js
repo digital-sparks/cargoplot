@@ -20,6 +20,8 @@ window.Webflow.push(() => {
 
     (window.hsFormsOnReady = window.hsFormsOnReady || []).push(() => {
       document.querySelectorAll('[data-element=hubspot-form]').forEach((form, i) => {
+        if (!form.getAttribute('formId')) return;
+
         form.setAttribute('hubspot-form-index', i);
 
         hbspt.forms.create({
@@ -33,9 +35,9 @@ window.Webflow.push(() => {
 
           onFormReady: (hubspotForm, data) => {
             // ScrollTrigger.refresh(); // uncomment if site uses GSAP ScrollTrigger
-            // const wfIx = Webflow.require('ix3');
+            const wfIx = Webflow.require('ix3');
             // console.log('form loaded');
-            // wfIx.emit('hubspot_form_loaded');
+            wfIx.emit('hubspot_form_loaded');
           },
 
           onFormSubmit: (hubspotForm, data) => {
