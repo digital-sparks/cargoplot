@@ -5,7 +5,6 @@
 window.Webflow ||= [];
 window.Webflow.push(() => {
   //   gsap.registerPlugin(SplitText);
-  //   gsap.registerPlugin(ScrollTrigger);
 
   // Platform component animation - only on desktop
   gsap.matchMedia().add('(min-width: 911px)', () => {

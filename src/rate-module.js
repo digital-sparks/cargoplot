@@ -24,7 +24,7 @@ const SEARCH_DEBOUNCE_MS = 300;
 const DATE_DISPLAY_FORMAT = 'dd-MM-yyyy'; // User-friendly format
 const DATE_URL_FORMAT = 'yyyy-MM-dd'; // ISO format for URL
 const DATE_MIN_OFFSET_DAYS = 0;
-const DATE_MAX_OFFSET_DAYS = 90;
+const DATE_MAX_OFFSET_DAYS = 3650;
 
 // Element IDs and Selectors
 const SELECTORS = {
@@ -194,7 +194,8 @@ function clearAllErrors() {
 function getLocale() {
   const docLang = document.documentElement.lang || 'en';
   const locales = { nl, de, en };
-  return (locales[docLang.toLowerCase()] || en).default;
+  const langCode = docLang.toLowerCase().split('-')[0];
+  return (locales[langCode] || en).default;
 }
 
 // ============================================================================
