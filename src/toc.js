@@ -1,3 +1,48 @@
+const scrollButtons = document.querySelectorAll('[data-button-click="scroll"]');
+
+scrollButtons.forEach((button) => {
+  button.addEventListener('click', (e) => {
+    e.preventDefault();
+
+    const targetSelector = button.getAttribute('href');
+
+    if (targetSelector) {
+      const targetElement = document.querySelector(targetSelector);
+
+      if (targetElement) {
+        // Get the target position relative to the document
+        const targetPosition = targetElement.getBoundingClientRect().top + window.pageYOffset;
+        const startPosition = window.pageYOffset;
+        const distance = targetPosition - startPosition;
+        const duration = 1000; // Duration in milliseconds
+        let start = null;
+
+        // Animation function
+        function animation(currentTime) {
+          if (start === null) start = currentTime;
+          const timeElapsed = currentTime - start;
+          const run = ease(timeElapsed, startPosition, distance, duration);
+          window.scrollTo(0, run);
+          if (timeElapsed < duration) requestAnimationFrame(animation);
+        }
+
+        // Easing function (ease-in-out)
+        function ease(t, b, c, d) {
+          t /= d / 2;
+          if (t < 1) return (c / 2) * t * t + b;
+          t--;
+          return (-c / 2) * (t * (t - 2) - 1) + b;
+        }
+
+        requestAnimationFrame(animation);
+      } else {
+        console.warn('Target element not found:', targetSelector);
+      }
+    } else {
+      console.warn('No href attribute found on button');
+    }
+  });
+});
 // ============================================================
 // UTILITIES
 // ============================================================
