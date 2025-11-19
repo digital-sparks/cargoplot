@@ -26,42 +26,44 @@ const DATE_URL_FORMAT = 'yyyy-MM-dd'; // ISO format for URL
 const DATE_MIN_OFFSET_DAYS = 0;
 const DATE_MAX_OFFSET_DAYS = 3650;
 
-// Element IDs and Selectors
-const SELECTORS = {
+// Data Attributes (replacing IDs)
+const DATA_ATTRS = {
+  // Module container
+  module: 'cargo-module',
+
   // Input fields
-  originInput: 'cargo_origin',
-  destinationInput: 'cargo_destination',
-  cargoTypeSelect: 'cargo_type',
-  cargoTypeDisplay: 'cargo_type_display',
-  dateInput: 'cargo_date',
+  originInput: 'cargo-origin',
+  destinationInput: 'cargo-destination',
+  cargoTypeSelect: 'cargo-type',
+  cargoTypeDisplay: 'cargo-type-display',
+  dateInput: 'cargo-date',
 
   // Checkboxes
-  seaCheckbox: 'cargo_option_sea',
-  airCheckbox: 'cargo_option_air',
-  trainCheckbox: 'cargo_option_train',
+  seaCheckbox: 'cargo-option-sea',
+  airCheckbox: 'cargo-option-air',
+  trainCheckbox: 'cargo-option-train',
 
   // Submit button
-  submitButton: '[data-button-click="cargo_submit"]',
+  submitButton: 'cargo_submit',
 
   // Dropdown elements
-  dropdown: '[data-element="dropdown"]',
-  dropdownLink: '[data-element="dropdown-link"]',
-  dropdownCity: '[data-element="city"]',
-  dropdownCountry: '[data-element="country"]',
+  dropdown: 'dropdown',
+  dropdownLink: 'dropdown-link',
+  dropdownCity: 'city',
+  dropdownCountry: 'country',
 
   // Error handling
-  errorClass: 'is-error',
-  errorElement: '.cargo_field-error',
-  inputField: '.cargo_input-field',
-  cargoField: '.cargo_field',
-  dateContainer: '.cargo_field:has(#cargo_date)',
+  errorElement: 'cargo-field-error',
+  inputField: 'cargo-input-field',
+  cargoField: 'cargo-field',
+  dateContainer: 'cargo-date-container',
 };
 
 // Transport Mode Options
 const TRANSPORT_MODES = [
-  { id: SELECTORS.seaCheckbox, value: 'sea' },
-  { id: SELECTORS.airCheckbox, value: 'air' },
-  { id: SELECTORS.trainCheckbox, value: 'rail' },
+  { attr: DATA_ATTRS.seaCheckbox, value: 'sea' },
+  { attr: DATA_ATTRS.airCheckbox, value: 'air' },
+  { attr: DATA_ATTRS.trainCheckbox, value: 'rail' },
 ];
 
 // Container Type Values (for URL parameter logic)
@@ -75,6 +77,7 @@ const DEFAULT_REDIRECT_URL = '/inquiry';
 
 // Dropdown Behavior
 const DROPDOWN_CLOSE_DELAY_MS = 200;
+const DROPDOWN_JUST_OPENED_DELAY_MS = 50;
 const DROPDOWN_STYLES = {
   focusedBackground: '#f5f5f5',
   defaultBackground: 'white',
@@ -84,6 +87,11 @@ const DROPDOWN_STYLES = {
 const ARIA_LABELS = {
   locationSuggestions: 'Location suggestions',
   cargoTypeOptions: 'Cargo type options',
+};
+
+// CSS Classes
+const CSS_CLASSES = {
+  error: 'is-error',
 };
 
 // ============================================================================
@@ -156,39 +164,6 @@ function dateToISO(date) {
 }
 
 /**
- * Shows error state for an input element
- */
-function showError(element) {
-  if (!element) return;
-  element.classList.add(SELECTORS.errorClass);
-  const errorElement = element.closest(SELECTORS.cargoField)?.querySelector(SELECTORS.errorElement);
-  if (errorElement) errorElement.style.display = 'block';
-}
-
-/**
- * Clears error state for an input element
- */
-function clearError(element) {
-  if (!element) return;
-  element.classList.remove(SELECTORS.errorClass);
-  const errorElement = element.closest(SELECTORS.cargoField)?.querySelector(SELECTORS.errorElement);
-  if (errorElement) errorElement.style.display = 'none';
-}
-
-/**
- * Clears all error states on page load
- */
-function clearAllErrors() {
-  document.querySelectorAll(SELECTORS.inputField).forEach((field) => {
-    field.classList.remove(SELECTORS.errorClass);
-  });
-  document.querySelectorAll(SELECTORS.errorElement).forEach((error) => {
-    error.style.display = 'none';
-  });
-  log('Page loaded, error states cleared');
-}
-
-/**
  * Gets document language and returns appropriate locale
  */
 function getLocale() {
@@ -198,65 +173,232 @@ function getLocale() {
   return (locales[langCode] || en).default;
 }
 
+/**
+ * Generates a unique ID for elements within a module
+ */
+function generateUniqueId(moduleIndex, prefix) {
+  return `${prefix}_${moduleIndex}_${Date.now()}`;
+}
+
 // ============================================================================
-// MAIN APPLICATION
+// SHARED GOOGLE MAPS API STATE
 // ============================================================================
 
-window.Webflow ||= [];
-window.Webflow.push(() => {
-  // Clear error states on page load
-  clearAllErrors();
+let mapsAPILoaded = false;
+let mapsAPILoading = false;
 
-  // Get locale for date picker
-  const locale = getLocale();
+// ============================================================================
+// MODULE CLASS
+// ============================================================================
 
-  // Set cargo_date to readonly
-  const cargoDateInput = document.getElementById(SELECTORS.dateInput);
-  if (cargoDateInput) {
-    cargoDateInput.readOnly = true;
-    cargoDateInput.style.cursor = 'pointer';
+class CargoFormModule {
+  constructor(moduleElement, moduleIndex) {
+    this.module = moduleElement;
+    this.moduleIndex = moduleIndex;
+    this.selectedDateISO = '';
+    this.originResults = [];
+    this.destinationResults = [];
+    this.eventHandlers = []; // Track handlers for cleanup
+
+    // Find all elements within this module
+    this.elements = this.findElements();
+
+    // Initialize if all required elements are found
+    if (this.validateElements()) {
+      this.init();
+    } else {
+      console.error(`Module ${moduleIndex}: Missing required elements`);
+    }
   }
 
-  // Store the ISO date format for URL submission
-  let selectedDateISO = '';
+  /**
+   * Find all elements within this module using data attributes
+   */
+  findElements() {
+    const find = (attr) => this.module.querySelector(`[data-${attr}]`);
+    const findAll = (attr) => this.module.querySelectorAll(`[data-${attr}]`);
+    const findSubmit = (attr) => this.module.querySelector(`[data-button-click="${attr}"]`);
 
-  // Initialize date picker
-  new AirDatepicker(`#${SELECTORS.dateInput}`, {
-    locale,
-    firstDay: 1,
-    dateFormat: DATE_DISPLAY_FORMAT,
-    minDate: new Date(Date.now() + DATE_MIN_OFFSET_DAYS * 24 * 60 * 60 * 1000),
-    maxDate: new Date(Date.now() + DATE_MAX_OFFSET_DAYS * 24 * 60 * 60 * 1000),
-    toggleSelected: false,
-    container: SELECTORS.dateContainer,
-    autoClose: true,
-    minView: 'days',
-    position: 'bottom right',
-    onSelect: function ({ date, formattedDate }) {
-      if (date) {
-        selectedDateISO = dateToISO(date);
-        log('Date selected:', formattedDate, '(ISO:', selectedDateISO + ')');
-      }
-      clearError(cargoDateInput);
-    },
-  });
-
-  // ============================================================================
-  // LOCATION AUTOCOMPLETE
-  // ============================================================================
-
-  const originResults = [];
-  const destinationResults = [];
-  let mapsAPILoaded = false;
-  let mapsAPILoading = false;
+    return {
+      originInput: find(DATA_ATTRS.originInput),
+      destinationInput: find(DATA_ATTRS.destinationInput),
+      cargoTypeSelect: find(DATA_ATTRS.cargoTypeSelect),
+      cargoTypeDisplay: find(DATA_ATTRS.cargoTypeDisplay),
+      dateInput: find(DATA_ATTRS.dateInput),
+      seaCheckbox: find(DATA_ATTRS.seaCheckbox),
+      airCheckbox: find(DATA_ATTRS.airCheckbox),
+      trainCheckbox: find(DATA_ATTRS.trainCheckbox),
+      submitButton: findSubmit(DATA_ATTRS.submitButton),
+      inputFields: findAll(DATA_ATTRS.inputField),
+      errorElements: findAll(DATA_ATTRS.errorElement),
+    };
+  }
 
   /**
-   * Initializes autocomplete for origin/destination inputs
+   * Validate that all required elements exist
    */
-  function initAutocomplete(inputId, resultsArray, dropdownElement) {
-    const input = document.getElementById(inputId);
+  validateElements() {
+    const required = [
+      'originInput',
+      'destinationInput',
+      'cargoTypeSelect',
+      'cargoTypeDisplay',
+      'dateInput',
+      'submitButton',
+    ];
+
+    return required.every((key) => this.elements[key]);
+  }
+
+  /**
+   * Initialize the module
+   */
+  init() {
+    log(`Module ${this.moduleIndex}: Initializing`);
+
+    this.clearAllErrors();
+    this.initDatePicker();
+    this.initAutocomplete();
+    this.initCargoTypeDropdown();
+    this.initTransportModeListeners();
+    this.initSubmitHandler();
+
+    log(`Module ${this.moduleIndex}: Initialized successfully`);
+  }
+
+  /**
+   * Add event handler and track it for cleanup
+   */
+  addEventHandler(element, event, handler, options) {
+    element.addEventListener(event, handler, options);
+    this.eventHandlers.push({ element, event, handler, options });
+  }
+
+  /**
+   * Clean up all event handlers (for potential future use)
+   */
+  cleanup() {
+    this.eventHandlers.forEach(({ element, event, handler, options }) => {
+      element.removeEventListener(event, handler, options);
+    });
+    this.eventHandlers = [];
+    log(`Module ${this.moduleIndex}: Cleaned up`);
+  }
+
+  /**
+   * Clear all error states
+   */
+  clearAllErrors() {
+    this.elements.inputFields.forEach((field) => {
+      field.classList.remove(CSS_CLASSES.error);
+    });
+    this.elements.errorElements.forEach((error) => {
+      error.style.display = 'none';
+    });
+    log(`Module ${this.moduleIndex}: Error states cleared`);
+  }
+
+  /**
+   * Show error state for an input element
+   */
+  showError(element) {
+    if (!element) return;
+    element.classList.add(CSS_CLASSES.error);
+    const cargoField = element.closest('.cargo_field');
+    const errorElement = cargoField?.querySelector(`[data-${DATA_ATTRS.errorElement}]`);
+    if (errorElement) errorElement.style.display = 'block';
+  }
+
+  /**
+   * Clear error state for an input element
+   */
+  clearError(element) {
+    if (!element) return;
+    element.classList.remove(CSS_CLASSES.error);
+    const cargoField = element.closest('.cargo_field');
+    const errorElement = cargoField?.querySelector(`[data-${DATA_ATTRS.errorElement}]`);
+    if (errorElement) errorElement.style.display = 'none';
+  }
+
+  /**
+   * Initialize date picker
+   */
+  initDatePicker() {
+    const dateInput = this.elements.dateInput;
+    dateInput.readOnly = true;
+    dateInput.style.cursor = 'pointer';
+
+    // Try to find date container, fallback to parent field
+    const dateContainer =
+      dateInput.closest(`[data-${DATA_ATTRS.dateContainer}]`) || dateInput.closest('.cargo_field');
+
+    const locale = getLocale();
+
+    new AirDatepicker(dateInput, {
+      locale,
+      firstDay: 1,
+      dateFormat: DATE_DISPLAY_FORMAT,
+      minDate: new Date(Date.now() + DATE_MIN_OFFSET_DAYS * 24 * 60 * 60 * 1000),
+      maxDate: new Date(Date.now() + DATE_MAX_OFFSET_DAYS * 24 * 60 * 60 * 1000),
+      toggleSelected: false,
+      container: dateContainer,
+      autoClose: true,
+      minView: 'days',
+      position: 'bottom right',
+      onSelect: ({ date, formattedDate }) => {
+        if (date) {
+          this.selectedDateISO = dateToISO(date);
+          log(
+            `Module ${this.moduleIndex}: Date selected:`,
+            formattedDate,
+            '(ISO:',
+            this.selectedDateISO + ')'
+          );
+        }
+        this.clearError(dateInput);
+      },
+    });
+
+    log(`Module ${this.moduleIndex}: Date picker initialized`);
+  }
+
+  /**
+   * Initialize location autocomplete
+   */
+  initAutocomplete() {
+    const originFieldWrap = this.elements.originInput.closest('.cargo_input-field-wrap');
+    const destinationFieldWrap = this.elements.destinationInput.closest('.cargo_input-field-wrap');
+
+    const originDropdown = originFieldWrap?.parentElement.querySelector(
+      `[data-${DATA_ATTRS.dropdown}]`
+    );
+    const destinationDropdown = destinationFieldWrap?.parentElement.querySelector(
+      `[data-${DATA_ATTRS.dropdown}]`
+    );
+
+    this.validateOrigin = this.createAutocomplete(
+      this.elements.originInput,
+      this.originResults,
+      originDropdown,
+      'origin'
+    );
+
+    this.validateDestination = this.createAutocomplete(
+      this.elements.destinationInput,
+      this.destinationResults,
+      destinationDropdown,
+      'destination'
+    );
+
+    log(`Module ${this.moduleIndex}: Autocomplete initialized`);
+  }
+
+  /**
+   * Create autocomplete for a location input
+   */
+  createAutocomplete(input, resultsArray, dropdownElement, fieldName) {
     if (!input || !dropdownElement) {
-      console.error('Input or dropdown not found for', inputId);
+      console.error(`Module ${this.moduleIndex}: Input or dropdown not found for ${fieldName}`);
       return null;
     }
 
@@ -266,14 +408,14 @@ window.Webflow.push(() => {
     let selectedFromDropdown = false;
     let focusedOptionIndex = -1;
 
-    const template = dropdownElement.querySelector(SELECTORS.dropdownLink);
+    const template = dropdownElement.querySelector(`[data-${DATA_ATTRS.dropdownLink}]`);
     if (!template) {
-      console.error('Template not found for', inputId);
+      console.error(`Module ${this.moduleIndex}: Template not found for ${fieldName}`);
       return null;
     }
 
-    // Setup ARIA attributes
-    const dropdownId = `${inputId}_dropdown_list`;
+    // Setup ARIA attributes with unique IDs
+    const dropdownId = generateUniqueId(this.moduleIndex, `${fieldName}_dropdown`);
     dropdownElement.id = dropdownId;
     dropdownElement.setAttribute('role', 'listbox');
     dropdownElement.setAttribute('aria-label', ARIA_LABELS.locationSuggestions);
@@ -288,14 +430,14 @@ window.Webflow.push(() => {
       dropdownElement.style.display = 'block';
       input.setAttribute('aria-expanded', 'true');
       focusedOptionIndex = -1;
-      log(inputId, 'dropdown opened');
+      log(`Module ${this.moduleIndex}: ${fieldName} dropdown opened`);
     };
 
     const closeDropdown = () => {
       dropdownElement.style.display = 'none';
       input.setAttribute('aria-expanded', 'false');
       focusedOptionIndex = -1;
-      log(inputId, 'dropdown closed');
+      log(`Module ${this.moduleIndex}: ${fieldName} dropdown closed`);
     };
 
     // Validation function
@@ -304,11 +446,11 @@ window.Webflow.push(() => {
       const isValid = selectedFromDropdown || resultsArray.some((r) => r.combination === value);
 
       if (!isValid && value.length > 0) {
-        showError(input);
-        log(inputId, 'validation failed');
+        this.showError(input);
+        log(`Module ${this.moduleIndex}: ${fieldName} validation failed`);
       } else {
-        clearError(input);
-        log(inputId, 'validation passed');
+        this.clearError(input);
+        log(`Module ${this.moduleIndex}: ${fieldName} validation passed`);
       }
 
       return isValid;
@@ -317,7 +459,7 @@ window.Webflow.push(() => {
     // Focus option by index
     const focusOption = (index) => {
       const options = dropdownElement.querySelectorAll(
-        `${SELECTORS.dropdownLink}:not([style*="display: none"])`
+        `[data-${DATA_ATTRS.dropdownLink}]:not([style*="display: none"])`
       );
 
       options.forEach((opt) => {
@@ -342,7 +484,7 @@ window.Webflow.push(() => {
       if (isLoading) return;
 
       isLoading = true;
-      log(inputId, 'searching for:', value);
+      log(`Module ${this.moduleIndex}: ${fieldName} searching for:`, value);
 
       if (!sessionToken) {
         sessionToken = new google.maps.places.AutocompleteSessionToken();
@@ -360,7 +502,7 @@ window.Webflow.push(() => {
         if (!suggestions || suggestions.length === 0) {
           isLoading = false;
           closeDropdown();
-          log(inputId, 'no suggestions found');
+          log(`Module ${this.moduleIndex}: ${fieldName} no suggestions found`);
           return;
         }
 
@@ -407,26 +549,34 @@ window.Webflow.push(() => {
         });
 
         // Clear and display results
-        const links = dropdownElement.querySelectorAll(SELECTORS.dropdownLink);
+        const links = dropdownElement.querySelectorAll(`[data-${DATA_ATTRS.dropdownLink}]`);
         links.forEach((link, index) => {
           if (index > 0) link.remove();
         });
 
-        displayResults(dropdownElement, template, resultsArray, input, openDropdown, closeDropdown);
+        this.displayResults(
+          dropdownElement,
+          template,
+          resultsArray,
+          input,
+          openDropdown,
+          closeDropdown,
+          dropdownId
+        );
 
-        log(inputId, 'found', resultsArray.length, 'results');
+        log(`Module ${this.moduleIndex}: ${fieldName} found`, resultsArray.length, 'results');
 
         sessionToken = new google.maps.places.AutocompleteSessionToken();
         isLoading = false;
       } catch (error) {
-        console.error('Error fetching place details:', error);
+        console.error(`Module ${this.moduleIndex}: Error fetching place details:`, error);
         isLoading = false;
         closeDropdown();
       }
     };
 
     // Event: Focus
-    input.addEventListener('focus', async function () {
+    const handleFocus = async function () {
       this.select();
 
       if (!mapsAPILoaded && !mapsAPILoading) {
@@ -445,23 +595,24 @@ window.Webflow.push(() => {
       if (resultsArray.length > 0) {
         openDropdown();
       }
-      log(inputId, 'input focused');
-    });
+    };
+    this.addEventHandler(input, 'focus', handleFocus);
 
     // Event: Blur
-    input.addEventListener('blur', () => {
+    const handleBlur = () => {
       setTimeout(() => {
         if (!dropdownElement.contains(document.activeElement)) {
           closeDropdown();
         }
       }, DROPDOWN_CLOSE_DELAY_MS);
-    });
+    };
+    this.addEventHandler(input, 'blur', handleBlur);
 
     // Event: Keydown
-    input.addEventListener('keydown', (e) => {
+    const handleKeydown = (e) => {
       const isOpen = dropdownElement.style.display === 'block';
       const options = dropdownElement.querySelectorAll(
-        `${SELECTORS.dropdownLink}:not([style*="display: none"])`
+        `[data-${DATA_ATTRS.dropdownLink}]:not([style*="display: none"])`
       );
 
       if (e.key === ' ' || e.keyCode === 32) {
@@ -483,24 +634,29 @@ window.Webflow.push(() => {
         } else if (e.key === 'Enter' && focusedOptionIndex >= 0) {
           e.preventDefault();
           const selectedOption = options[focusedOptionIndex];
-          const cityText = selectedOption.querySelector(SELECTORS.dropdownCity)?.textContent;
-          const countryText = selectedOption.querySelector(SELECTORS.dropdownCountry)?.textContent;
+          const cityText = selectedOption.querySelector(
+            `[data-${DATA_ATTRS.dropdownCity}]`
+          )?.textContent;
+          const countryText = selectedOption.querySelector(
+            `[data-${DATA_ATTRS.dropdownCountry}]`
+          )?.textContent;
           if (cityText && countryText) {
             input.value = `${cityText}, ${countryText}`;
             selectedFromDropdown = true;
             closeDropdown();
             validateInput();
-            log(inputId, 'selected via keyboard:', input.value);
+            log(`Module ${this.moduleIndex}: ${fieldName} selected via keyboard:`, input.value);
           }
         }
       }
-    });
+    };
+    this.addEventHandler(input, 'keydown', handleKeydown);
 
     // Event: Input
-    input.addEventListener('input', function () {
+    const handleInput = () => {
       const value = input.value;
       selectedFromDropdown = false;
-      clearError(input);
+      this.clearError(input);
 
       if (debounceTimer) {
         clearTimeout(debounceTimer);
@@ -509,7 +665,7 @@ window.Webflow.push(() => {
       if (value.length < MIN_SEARCH_CHARACTERS) {
         debounceTimer = setTimeout(() => {
           resultsArray.length = 0;
-          const links = dropdownElement.querySelectorAll(SELECTORS.dropdownLink);
+          const links = dropdownElement.querySelectorAll(`[data-${DATA_ATTRS.dropdownLink}]`);
           links.forEach((link, index) => {
             if (index > 0) link.remove();
           });
@@ -519,35 +675,38 @@ window.Webflow.push(() => {
       }
 
       if (!mapsAPILoaded) {
-        log(inputId, 'waiting for Google Maps API to load...');
+        log(`Module ${this.moduleIndex}: ${fieldName} waiting for Google Maps API to load...`);
         return;
       }
 
       debounceTimer = setTimeout(() => {
         performSearch(value);
       }, SEARCH_DEBOUNCE_MS);
-    });
+    };
+    this.addEventHandler(input, 'input', handleInput);
 
     // Event: Click outside
-    document.addEventListener('click', (e) => {
+    const handleClickOutside = (e) => {
       if (!input.contains(e.target) && !dropdownElement.contains(e.target)) {
         closeDropdown();
       }
-    });
+    };
+    this.addEventHandler(document, 'click', handleClickOutside);
 
     return validateInput;
   }
 
   /**
-   * Displays results in dropdown
+   * Display results in dropdown
    */
-  function displayResults(
+  displayResults(
     dropdownElement,
     template,
     resultsArray,
     input,
     openDropdown,
-    closeDropdown
+    closeDropdown,
+    dropdownId
   ) {
     if (resultsArray.length === 0) {
       closeDropdown();
@@ -560,12 +719,12 @@ window.Webflow.push(() => {
       const item = template.cloneNode(true);
       item.style.display = 'block';
       item.setAttribute('role', 'option');
-      item.setAttribute('id', `${dropdownElement.id}_option_${index}`);
+      item.setAttribute('id', `${dropdownId}_option_${index}`);
       item.setAttribute('aria-selected', 'false');
       item.setAttribute('tabindex', '-1');
 
-      const cityElement = item.querySelector(SELECTORS.dropdownCity);
-      const countryElement = item.querySelector(SELECTORS.dropdownCountry);
+      const cityElement = item.querySelector(`[data-${DATA_ATTRS.dropdownCity}]`);
+      const countryElement = item.querySelector(`[data-${DATA_ATTRS.dropdownCountry}]`);
 
       if (cityElement) cityElement.textContent = result.city;
       if (countryElement) countryElement.textContent = result.country;
@@ -582,8 +741,8 @@ window.Webflow.push(() => {
         input.value = result.combination;
         input.dispatchEvent(new Event('selected-from-dropdown'));
         closeDropdown();
-        clearError(input);
-        log('User selected from dropdown:', result.combination);
+        this.clearError(input);
+        log(`Module ${this.moduleIndex}: User selected from dropdown:`, result.combination);
       });
 
       dropdownElement.appendChild(item);
@@ -592,21 +751,17 @@ window.Webflow.push(() => {
     openDropdown();
   }
 
-  // ============================================================================
-  // CARGO TYPE DROPDOWN
-  // ============================================================================
-
   /**
-   * Initializes cargo type dropdown
+   * Initialize cargo type dropdown
    */
-  function initCargoTypeDropdown() {
-    const cargoSelect = document.getElementById(SELECTORS.cargoTypeSelect);
-    const cargoInput = document.getElementById(SELECTORS.cargoTypeDisplay);
-    const cargoFieldContainer = cargoInput?.closest(SELECTORS.cargoField);
-    const cargoDropdown = cargoFieldContainer?.querySelector(SELECTORS.dropdown);
+  initCargoTypeDropdown() {
+    const cargoSelect = this.elements.cargoTypeSelect;
+    const cargoInput = this.elements.cargoTypeDisplay;
+    const cargoField = cargoInput?.closest('.cargo_field');
+    const cargoDropdown = cargoField?.querySelector(`[data-${DATA_ATTRS.dropdown}]`);
 
     if (!cargoSelect || !cargoInput || !cargoDropdown) {
-      console.error('Cargo type elements not found');
+      console.error(`Module ${this.moduleIndex}: Cargo type elements not found`);
       return null;
     }
 
@@ -621,13 +776,13 @@ window.Webflow.push(() => {
 
     cargoSelect.style.display = 'none';
 
-    const template = cargoDropdown.querySelector(SELECTORS.dropdownLink);
+    const template = cargoDropdown.querySelector(`[data-${DATA_ATTRS.dropdownLink}]`);
     if (!template) {
-      console.error('Template not found for cargo type');
+      console.error(`Module ${this.moduleIndex}: Template not found for cargo type`);
       return null;
     }
 
-    const dropdownId = 'cargo_type_dropdown_list';
+    const dropdownId = generateUniqueId(this.moduleIndex, 'cargo_type_dropdown');
     cargoDropdown.id = dropdownId;
     cargoDropdown.setAttribute('role', 'listbox');
     cargoDropdown.setAttribute('aria-label', ARIA_LABELS.cargoTypeOptions);
@@ -638,19 +793,24 @@ window.Webflow.push(() => {
       cargoDropdown.style.display = 'block';
       cargoInput.setAttribute('aria-expanded', 'true');
       focusedOptionIndex = -1;
-      log('Cargo type dropdown opened');
+      log(`Module ${this.moduleIndex}: Cargo type dropdown opened`);
+
+      // Prevent immediate closing by click-outside handler
+      setTimeout(() => {
+        cargoDropdown.setAttribute('data-just-opened', 'true');
+      }, DROPDOWN_JUST_OPENED_DELAY_MS);
     };
 
     const closeDropdown = () => {
       cargoDropdown.style.display = 'none';
       cargoInput.setAttribute('aria-expanded', 'false');
       focusedOptionIndex = -1;
-      log('Cargo type dropdown closed');
+      log(`Module ${this.moduleIndex}: Cargo type dropdown closed`);
     };
 
     const focusOption = (index) => {
       const options = cargoDropdown.querySelectorAll(
-        `${SELECTORS.dropdownLink}:not([style*="display: none"])`
+        `[data-${DATA_ATTRS.dropdownLink}]:not([style*="display: none"])`
       );
 
       options.forEach((opt) => {
@@ -674,18 +834,18 @@ window.Webflow.push(() => {
       const isValid = cargoInput.value.trim().length > 0;
 
       if (!isValid) {
-        showError(cargoInput);
-        log('Cargo type validation failed');
+        this.showError(cargoInput);
+        log(`Module ${this.moduleIndex}: Cargo type validation failed`);
       } else {
-        clearError(cargoInput);
-        log('Cargo type validation passed');
+        this.clearError(cargoInput);
+        log(`Module ${this.moduleIndex}: Cargo type validation passed`);
       }
 
       return isValid;
     };
 
     const populateDropdown = () => {
-      const links = cargoDropdown.querySelectorAll(SELECTORS.dropdownLink);
+      const links = cargoDropdown.querySelectorAll(`[data-${DATA_ATTRS.dropdownLink}]`);
       links.forEach((link, index) => {
         if (index > 0) link.remove();
       });
@@ -703,8 +863,8 @@ window.Webflow.push(() => {
         item.setAttribute('data-value', option.value);
         item.setAttribute('tabindex', '-1');
 
-        const cityElement = item.querySelector(SELECTORS.dropdownCity);
-        const countryElement = item.querySelector(SELECTORS.dropdownCountry);
+        const cityElement = item.querySelector(`[data-${DATA_ATTRS.dropdownCity}]`);
+        const countryElement = item.querySelector(`[data-${DATA_ATTRS.dropdownCountry}]`);
 
         if (cityElement) {
           cityElement.textContent = option.textContent;
@@ -727,7 +887,12 @@ window.Webflow.push(() => {
           cargoSelect.value = option.value;
           closeDropdown();
           validateCargoType();
-          log('User selected cargo type:', option.value, '-', option.textContent);
+          log(
+            `Module ${this.moduleIndex}: User selected cargo type:`,
+            option.value,
+            '-',
+            option.textContent
+          );
         });
 
         cargoDropdown.appendChild(item);
@@ -735,22 +900,24 @@ window.Webflow.push(() => {
     };
 
     populateDropdown();
-    log('Cargo type dropdown initialized without default selection');
+    log(`Module ${this.moduleIndex}: Cargo type dropdown initialized`);
 
     // Event: Click
-    cargoInput.addEventListener('click', () => {
+    const handleClick = (e) => {
+      e.stopPropagation();
       if (cargoDropdown.style.display === 'none') {
         openDropdown();
       } else {
         closeDropdown();
       }
-    });
+    };
+    this.addEventHandler(cargoInput, 'click', handleClick);
 
     // Event: Keydown
-    cargoInput.addEventListener('keydown', (e) => {
+    const handleKeydown = (e) => {
       const isOpen = cargoDropdown.style.display === 'block';
       const options = cargoDropdown.querySelectorAll(
-        `${SELECTORS.dropdownLink}:not([style*="display: none"])`
+        `[data-${DATA_ATTRS.dropdownLink}]:not([style*="display: none"])`
       );
 
       if (e.key === ' ' || e.keyCode === 32) {
@@ -776,163 +943,171 @@ window.Webflow.push(() => {
           e.preventDefault();
           const selectedOption = options[focusedOptionIndex];
           const value = selectedOption.getAttribute('data-value');
-          const text = selectedOption.querySelector(SELECTORS.dropdownCity)?.textContent;
+          const text = selectedOption.querySelector(
+            `[data-${DATA_ATTRS.dropdownCity}]`
+          )?.textContent;
           if (value && text) {
             cargoInput.value = text;
             cargoSelect.value = value;
             closeDropdown();
             validateCargoType();
-            log('User selected cargo type via keyboard:', value, '-', text);
+            log(
+              `Module ${this.moduleIndex}: User selected cargo type via keyboard:`,
+              value,
+              '-',
+              text
+            );
           }
         }
       }
-    });
+    };
+    this.addEventHandler(cargoInput, 'keydown', handleKeydown);
 
     // Event: Blur
-    cargoInput.addEventListener('blur', () => {
+    const handleBlur = () => {
       setTimeout(closeDropdown, DROPDOWN_CLOSE_DELAY_MS);
-    });
+    };
+    this.addEventHandler(cargoInput, 'blur', handleBlur);
 
     // Event: Click outside
-    document.addEventListener('click', (e) => {
+    const handleClickOutside = (e) => {
+      // Don't close if dropdown was just opened
+      if (cargoDropdown.getAttribute('data-just-opened') === 'true') {
+        cargoDropdown.removeAttribute('data-just-opened');
+        return;
+      }
+
       if (!cargoInput.contains(e.target) && !cargoDropdown.contains(e.target)) {
         closeDropdown();
       }
-    });
+    };
+    this.addEventHandler(document, 'click', handleClickOutside);
 
-    return validateCargoType;
-  }
-
-  // ============================================================================
-  // TRANSPORT MODES
-  // ============================================================================
-
-  /**
-   * Gets all selected transport modes
-   */
-  function getTransportModes() {
-    return TRANSPORT_MODES.filter((option) => document.getElementById(option.id)?.checked).map(
-      (option) => option.value
-    );
+    this.validateCargoType = validateCargoType;
   }
 
   /**
-   * Validates transport modes selection
+   * Get all selected transport modes
    */
-  function validateTransportModes() {
-    const transportModes = getTransportModes();
+  getTransportModes() {
+    return TRANSPORT_MODES.filter((option) => {
+      const checkbox = this.module.querySelector(`[data-${option.attr}]`);
+      return checkbox?.checked;
+    }).map((option) => option.value);
+  }
+
+  /**
+   * Validate transport modes selection
+   */
+  validateTransportModes() {
+    const transportModes = this.getTransportModes();
     const isValid = transportModes.length > 0;
 
-    TRANSPORT_MODES.forEach((option) => {
-      const checkbox = document.getElementById(option.id);
-      if (checkbox) {
-        const container = checkbox.closest(SELECTORS.cargoField);
-        if (container) {
-          const errorElement = container.querySelector(SELECTORS.errorElement);
-          if (errorElement) {
-            errorElement.style.display = isValid ? 'none' : 'block';
-          }
+    // Find the transport mode container and show/hide error
+    const firstCheckbox = this.module.querySelector(`[data-${TRANSPORT_MODES[0].attr}]`);
+    if (firstCheckbox) {
+      const container =
+        firstCheckbox.closest('.rate_bottom-row') || firstCheckbox.closest('.cargo_field');
+      if (container) {
+        const errorElement = container.querySelector(`[data-${DATA_ATTRS.errorElement}]`);
+        if (errorElement) {
+          errorElement.style.display = isValid ? 'none' : 'block';
         }
       }
-    });
+    }
 
-    log(isValid ? 'Transport mode validation passed' : 'Transport mode validation failed');
+    log(
+      `Module ${this.moduleIndex}:`,
+      isValid ? 'Transport mode validation passed' : 'Transport mode validation failed'
+    );
     return isValid;
   }
 
-  // ============================================================================
-  // INITIALIZATION
-  // ============================================================================
-
-  const originInput = document.getElementById(SELECTORS.originInput);
-  const destinationInput = document.getElementById(SELECTORS.destinationInput);
-  const originDropdown = originInput
-    ?.closest(SELECTORS.cargoField)
-    ?.querySelector(SELECTORS.dropdown);
-  const destinationDropdown = destinationInput
-    ?.closest(SELECTORS.cargoField)
-    ?.querySelector(SELECTORS.dropdown);
-
-  const validateOrigin =
-    originInput && originDropdown
-      ? initAutocomplete(SELECTORS.originInput, originResults, originDropdown)
-      : null;
-
-  const validateDestination =
-    destinationInput && destinationDropdown
-      ? initAutocomplete(SELECTORS.destinationInput, destinationResults, destinationDropdown)
-      : null;
-
-  const validateCargoType = initCargoTypeDropdown();
-
-  // Add change listeners for transport modes
-  TRANSPORT_MODES.forEach((option) => {
-    const checkbox = document.getElementById(option.id);
-    if (checkbox) {
-      checkbox.addEventListener('change', () => {
-        log('Transport modes changed:', getTransportModes());
-      });
-    }
-  });
-
-  // ============================================================================
-  // FORM SUBMISSION
-  // ============================================================================
+  /**
+   * Initialize transport mode listeners
+   */
+  initTransportModeListeners() {
+    TRANSPORT_MODES.forEach((option) => {
+      const checkbox = this.module.querySelector(`[data-${option.attr}]`);
+      if (checkbox) {
+        const handleChange = () => {
+          log(`Module ${this.moduleIndex}: Transport modes changed:`, this.getTransportModes());
+        };
+        this.addEventHandler(checkbox, 'change', handleChange);
+      }
+    });
+  }
 
   /**
-   * Handles form submission
+   * Initialize submit handler
    */
-  function handleSubmit(event) {
-    event.preventDefault();
-    log('User clicked submit button');
+  initSubmitHandler() {
+    const submitButton = this.elements.submitButton;
 
-    const origin = originInput?.value || '';
-    const destination = destinationInput?.value || '';
-    const containerType = document.getElementById(SELECTORS.cargoTypeSelect)?.value || '';
-    const transportDate = selectedDateISO || '';
-    const transportModes = getTransportModes();
+    if (!submitButton) {
+      console.error(`Module ${this.moduleIndex}: Submit button not found`);
+      return;
+    }
+
+    const handleSubmit = (event) => this.handleSubmit(event);
+    this.addEventHandler(submitButton, 'click', handleSubmit);
+    log(`Module ${this.moduleIndex}: Submit button listener attached`);
+  }
+
+  /**
+   * Handle form submission
+   */
+  handleSubmit(event) {
+    event.preventDefault();
+    log(`Module ${this.moduleIndex}: User clicked submit button`);
+
+    const origin = this.elements.originInput?.value || '';
+    const destination = this.elements.destinationInput?.value || '';
+    const containerType = this.elements.cargoTypeSelect?.value || '';
+    const transportDate = this.selectedDateISO || '';
+    const transportModes = this.getTransportModes();
 
     let isValid = true;
 
     // Validate origin
-    if (validateOrigin && !validateOrigin()) {
-      showError(originInput);
+    if (this.validateOrigin && !this.validateOrigin()) {
+      this.showError(this.elements.originInput);
       isValid = false;
     } else if (!origin) {
-      showError(originInput);
+      this.showError(this.elements.originInput);
       isValid = false;
     }
 
     // Validate destination
-    if (validateDestination && !validateDestination()) {
-      showError(destinationInput);
+    if (this.validateDestination && !this.validateDestination()) {
+      this.showError(this.elements.destinationInput);
       isValid = false;
     } else if (!destination) {
-      showError(destinationInput);
+      this.showError(this.elements.destinationInput);
       isValid = false;
     }
 
     // Validate cargo type
-    if (validateCargoType && !validateCargoType()) {
+    if (this.validateCargoType && !this.validateCargoType()) {
       isValid = false;
     } else if (!containerType) {
-      showError(document.getElementById(SELECTORS.cargoTypeDisplay));
+      this.showError(this.elements.cargoTypeDisplay);
       isValid = false;
     }
 
     // Validate date
     if (!transportDate) {
-      showError(cargoDateInput);
+      this.showError(this.elements.dateInput);
       isValid = false;
     }
 
     // Validate transport modes
-    if (!validateTransportModes()) {
+    if (!this.validateTransportModes()) {
       isValid = false;
     }
 
     if (!isValid) {
-      log('Form validation failed:', {
+      log(`Module ${this.moduleIndex}: Form validation failed:`, {
         origin: origin || 'MISSING',
         destination: destination || 'MISSING',
         containerType: containerType || 'MISSING',
@@ -942,11 +1117,10 @@ window.Webflow.push(() => {
       return;
     }
 
-    log('Form validation passed');
+    log(`Module ${this.moduleIndex}: Form validation passed`);
 
     // Get redirect URL from button
-    const submitButton = document.querySelector(SELECTORS.submitButton);
-    const baseUrl = submitButton?.getAttribute('href') || DEFAULT_REDIRECT_URL;
+    const baseUrl = this.elements.submitButton.getAttribute('href') || DEFAULT_REDIRECT_URL;
 
     // Build URL parameters
     const params = new URLSearchParams();
@@ -968,26 +1142,46 @@ window.Webflow.push(() => {
     // Construct final URL
     const finalUrl = `${baseUrl}?${params.toString()}`;
 
-    log('Final URL constructed:', finalUrl);
-    log('Form data:', {
+    log(`Module ${this.moduleIndex}: Final URL constructed:`, finalUrl);
+    log(`Module ${this.moduleIndex}: Form data:`, {
       origin,
       destination,
       containerType,
       transportDate,
       transportModes,
     });
-    log('Redirecting user...');
+    log(`Module ${this.moduleIndex}: Redirecting user...`);
 
     // Redirect to the new page
     window.location.href = finalUrl;
   }
+}
 
-  // Attach submit handler
-  const submitButton = document.querySelector(SELECTORS.submitButton);
-  if (submitButton) {
-    submitButton.addEventListener('click', handleSubmit);
-    log('Submit button listener attached');
-  } else {
-    console.error('Submit button not found');
-  }
-});
+// ============================================================================
+// INITIALIZATION
+// ============================================================================
+
+// Prevent multiple initializations
+if (!window.cargoModulesInitialized) {
+  window.cargoModulesInitialized = true;
+
+  window.Webflow ||= [];
+  window.Webflow.push(() => {
+    // Find all cargo modules on the page
+    const modules = document.querySelectorAll(`[data-${DATA_ATTRS.module}]`);
+
+    if (modules.length === 0) {
+      console.warn('No cargo form modules found on page');
+      return;
+    }
+
+    log(`Found ${modules.length} cargo form module(s) on page`);
+
+    // Initialize each module
+    modules.forEach((module, index) => {
+      new CargoFormModule(module, index);
+    });
+
+    log('All cargo form modules initialized');
+  });
+}

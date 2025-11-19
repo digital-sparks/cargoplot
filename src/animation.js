@@ -347,7 +347,7 @@ window.Webflow.push(() => {
         trigger: target,
         start: 'top 80%', // Animation starts when element is 80% into viewport
         end: 'bottom 20%',
-        toggleActions: 'play none none reverse', // Play on enter, reverse on leave
+        toggleActions: 'play none none none', // Play on enter, reverse on leave
         once: true, // Only animate once
         // markers: true, // Remove in production
       },
