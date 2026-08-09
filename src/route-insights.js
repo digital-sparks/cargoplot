@@ -20,8 +20,35 @@
  * Option B contract: Webflow renders CMS baseline values server-side;
  * this script refreshes them from the JSON on load. sampleSize:0 => "—".
  */
-import { Chart } from 'chart.js/auto';
+import {
+  BarController,
+  BarElement,
+  CategoryScale,
+  Chart,
+  Filler,
+  LineController,
+  LineElement,
+  LinearScale,
+  PointElement,
+  Tooltip,
+} from 'chart.js';
 import ChartDataLabels from 'chartjs-plugin-datalabels';
+
+/* Register only what these four charts actually use. Importing 'chart.js/auto'
+   instead would pull in every controller (doughnut, radar, polar, bubble, …)
+   for ~27kb more in the bundle. ChartDataLabels is deliberately absent from
+   this list — it stays per-chart (plugins: [ChartDataLabels]), see below. */
+Chart.register(
+  LineController,
+  BarController,
+  LineElement,
+  PointElement,
+  BarElement,
+  CategoryScale,
+  LinearScale,
+  Filler,
+  Tooltip
+);
 
 (function () {
   'use strict';
@@ -200,21 +227,44 @@ import ChartDataLabels from 'chartjs-plugin-datalabels';
     if (chartInstances[name]) { chartInstances[name].destroy(); delete chartInstances[name]; }
   }
 
-  /* Price history: 24 monthly points, windows sliced client-side.
-     sampleSize:0 => null value => gap (spanGaps:false). */
-  function renderPriceHistory(host, series, windowMonths) {
-    destroyChart('price-history');
-    var pts = series.points.slice(-windowMonths);
+  /* Shared renderer for the two line charts. They differ only in y-scale
+     bounds, tick/tooltip formatting, point size and layout padding; the dark
+     line, accent fill, gaps at sampleSize 0 and the accent dot on the last real
+     datapoint are identical. */
+  function renderLineChart(name, host, pts, opts) {
+    destroyChart(name);
     var values = pts.map(function (p) { return p.sampleSize > 0 ? p.value : null; });
     var present = values.filter(function (v) { return v !== null; });
     if (!present.length) { host.setAttribute('data-empty', 'true'); host.innerHTML = ''; return; }
     host.removeAttribute('data-empty');
 
-    var yMin = Math.floor(Math.min.apply(null, present) * 0.85 / 100) * 100;
-    var yMax = Math.ceil(Math.max.apply(null, present) * 1.1 / 100) * 100;
-    if (yMin === yMax) { yMin -= 200; yMax += 200; }
+    // Last real datapoint: resolved once here, not re-scanned per point per frame.
+    var last = values.length - 1;
+    while (last >= 0 && values[last] === null) last--;
 
-    chartInstances['price-history'] = new Chart(mountCanvas(host), {
+    var b = opts.bounds(Math.min.apply(null, present), Math.max.apply(null, present));
+
+    var options = {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        datalabels: { display: false },
+        tooltip: { callbacks: { label: function (c) { return opts.tooltip(c.parsed.y); } } }
+      },
+      scales: {
+        x: { grid: { display: false }, ticks: { font: { size: 16, weight: '600' }, color: COLORS.tick } },
+        y: {
+          border: { display: false },
+          grid: { color: COLORS.grid, drawTicks: false },
+          ticks: opts.ticks(b),
+          min: b.min, max: b.max
+        }
+      }
+    };
+    // Only price-history pads its layout; leave the key absent otherwise.
+    if (opts.layout) options.layout = opts.layout;
+
+    chartInstances[name] = new Chart(mountCanvas(host), {
       type: 'line',
       data: {
         labels: pts.map(function (p) { return monthLabel(p.at); }),
@@ -226,41 +276,35 @@ import ChartDataLabels from 'chartjs-plugin-datalabels';
           fill: true,
           tension: 0,
           spanGaps: false,
-          pointBackgroundColor: function (c) {
-            var d = c.dataset.data, i = c.dataIndex;
-            for (var last = d.length - 1; last >= 0 && d[last] === null; last--);
-            return i === last ? COLORS.accent : 'transparent';
-          },
+          pointBackgroundColor: function (c) { return c.dataIndex === last ? COLORS.accent : 'transparent'; },
           pointBorderColor: 'transparent',
-          pointRadius: function (c) {
-            var d = c.dataset.data, i = c.dataIndex;
-            for (var last = d.length - 1; last >= 0 && d[last] === null; last--);
-            return i === last ? 6 : 0;
-          }
+          pointRadius: function (c) { return c.dataIndex === last ? opts.pointRadius : 0; }
         }]
       },
-      options: {
-        responsive: true, maintainAspectRatio: false,
-        plugins: {
-          legend: { display: false },
-          datalabels: { display: false },
-          tooltip: { callbacks: { label: function (c) { return fmt(c.parsed.y, 'money'); } } }
-        },
-        layout: { padding: { left: 20, right: 20 } },
-        scales: {
-          x: { grid: { display: false }, ticks: { font: { size: 16, weight: '600' }, color: COLORS.tick } },
-          y: {
-            border: { display: false },
-            grid: { color: COLORS.grid, drawTicks: false },
-            ticks: {
-              stepSize: Math.max(1, Math.round((yMax - yMin) / 4)),
-              font: { size: 16, weight: '600' }, color: COLORS.tick, padding: 20,
-              callback: function (v) { return fmt(v, 'money'); }
-            },
-            min: yMin, max: yMax
-          }
-        }
-      }
+      options: options
+    });
+  }
+
+  /* Price history: 24 monthly points, windows sliced client-side.
+     sampleSize:0 => null value => gap (spanGaps:false). */
+  function renderPriceHistory(host, series, windowMonths) {
+    renderLineChart('price-history', host, series.points.slice(-windowMonths), {
+      pointRadius: 6,
+      layout: { padding: { left: 20, right: 20 } },
+      bounds: function (min, max) {
+        var lo = Math.floor(min * 0.85 / 100) * 100;
+        var hi = Math.ceil(max * 1.1 / 100) * 100;
+        if (lo === hi) { lo -= 200; hi += 200; }
+        return { min: lo, max: hi };
+      },
+      ticks: function (b) {
+        return {
+          stepSize: Math.max(1, Math.round((b.max - b.min) / 4)),
+          font: { size: 16, weight: '600' }, color: COLORS.tick, padding: 20,
+          callback: function (v) { return fmt(v, 'money'); }
+        };
+      },
+      tooltip: function (v) { return fmt(v, 'money'); }
     });
   }
 
@@ -277,22 +321,25 @@ import ChartDataLabels from 'chartjs-plugin-datalabels';
     var yMax = Math.max(4, Math.ceil(Math.max(maxAbs, threshold) * 1.3));
     var yMin = minVal < 0 ? Math.floor(minVal * 1.3) : 0; // signed delays: early = negative
 
+    /* Per-bar styling resolved once into arrays. Chart.js accepts arrays here,
+       so this drops three scriptable callbacks that otherwise re-run for every
+       bar on every frame of the draw/hover/resize cycle. */
+    var barColors = pts.map(function (p, i) {
+      if (!p || p.inProgress) return COLORS.inProgress;
+      return values[i] >= threshold ? COLORS.amber : COLORS.accent;
+    });
+    var barBorders = pts.map(function (p) { return p && p.inProgress ? COLORS.grey : 'transparent'; });
+    var barBorderWidths = pts.map(function (p) { return p && p.inProgress ? 1 : 0; });
+
     chartInstances['weekly-delay'] = new Chart(mountCanvas(host), {
       type: 'bar',
       data: {
         labels: pts.map(function (p, i) { return 'W' + (i + 1); }),
         datasets: [{
           data: values,
-          backgroundColor: function (c) {
-            var p = pts[c.dataIndex];
-            if (!p || p.inProgress) return COLORS.inProgress;
-            return (c.parsed.y >= threshold) ? COLORS.amber : COLORS.accent;
-          },
-          borderColor: function (c) {
-            var p = pts[c.dataIndex];
-            return p && p.inProgress ? COLORS.grey : 'transparent';
-          },
-          borderWidth: function (c) { var p = pts[c.dataIndex]; return p && p.inProgress ? 1 : 0; },
+          backgroundColor: barColors,
+          borderColor: barBorders,
+          borderWidth: barBorderWidths,
           borderDash: [4, 3],
           barThickness: 28
         }]
@@ -319,53 +366,18 @@ import ChartDataLabels from 'chartjs-plugin-datalabels';
 
   /* Monthly transit trend: 12 months ending 2 months back. Gaps preserved. */
   function renderTransitTrend(host, series) {
-    destroyChart('transit-trend');
-    var pts = series.points;
-    var values = pts.map(function (p) { return p.sampleSize > 0 ? p.value : null; });
-    var present = values.filter(function (v) { return v !== null; });
-    if (!present.length) { host.setAttribute('data-empty', 'true'); host.innerHTML = ''; return; }
-    host.removeAttribute('data-empty');
-
-    var yMin = Math.max(0, Math.floor(Math.min.apply(null, present) * 0.9));
-    var yMax = Math.ceil(Math.max.apply(null, present) * 1.08);
-
-    chartInstances['transit-trend'] = new Chart(mountCanvas(host), {
-      type: 'line',
-      data: {
-        labels: pts.map(function (p) { return monthLabel(p.at); }),
-        datasets: [{
-          data: values,
-          borderColor: COLORS.dark, borderWidth: 2,
-          backgroundColor: COLORS.accentFill, fill: true, tension: 0, spanGaps: false,
-          pointBackgroundColor: function (c) {
-            var d = c.dataset.data, i = c.dataIndex;
-            for (var last = d.length - 1; last >= 0 && d[last] === null; last--);
-            return i === last ? COLORS.accent : 'transparent';
-          },
-          pointBorderColor: 'transparent',
-          pointRadius: function (c) {
-            var d = c.dataset.data, i = c.dataIndex;
-            for (var last = d.length - 1; last >= 0 && d[last] === null; last--);
-            return i === last ? 5 : 0;
-          }
-        }]
+    renderLineChart('transit-trend', host, series.points, {
+      pointRadius: 5,
+      bounds: function (min, max) {
+        return { min: Math.max(0, Math.floor(min * 0.9)), max: Math.ceil(max * 1.08) };
       },
-      options: {
-        responsive: true, maintainAspectRatio: false,
-        plugins: {
-          legend: { display: false },
-          datalabels: { display: false },
-          tooltip: { callbacks: { label: function (c) { return fmt(c.parsed.y, 'days') + 'd'; } } }
-        },
-        scales: {
-          x: { grid: { display: false }, ticks: { font: { size: 16, weight: '600' }, color: COLORS.tick } },
-          y: {
-            border: { display: false }, grid: { color: COLORS.grid, drawTicks: false },
-            ticks: { font: { size: 16, weight: '600' }, color: COLORS.tick, callback: function (v) { return v + 'd'; } },
-            min: yMin, max: yMax
-          }
-        }
-      }
+      ticks: function () {
+        return {
+          font: { size: 16, weight: '600' }, color: COLORS.tick,
+          callback: function (v) { return v + 'd'; }
+        };
+      },
+      tooltip: function (v) { return fmt(v, 'days') + 'd'; }
     });
   }
 
@@ -439,16 +451,20 @@ import ChartDataLabels from 'chartjs-plugin-datalabels';
     if (!toggles.length) { renderPriceHistory(host, series, 12); return; }
 
     var defaultToggle = null;
+    var defaultMonths = 0;
     toggles.forEach(function (t) {
       var months = parseInt(t.getAttribute('data-route-window'), 10);
       var ok = hasData(months);
       t.classList.toggle('is-disabled', !ok);
-      if (ok) {
-        t.addEventListener('click', function () { select(t, months); });
-        if (months === 12 || (!defaultToggle && ok)) defaultToggle = defaultToggle && parseInt(defaultToggle.getAttribute('data-route-window'), 10) === 12 ? defaultToggle : (months === 12 ? t : (defaultToggle || t));
+      if (!ok) return;
+      t.addEventListener('click', function () { select(t, months); });
+      // Prefer the 12M window; otherwise the first window that has data.
+      if (!defaultToggle || (months === 12 && defaultMonths !== 12)) {
+        defaultToggle = t;
+        defaultMonths = months;
       }
     });
-    if (defaultToggle) select(defaultToggle, parseInt(defaultToggle.getAttribute('data-route-window'), 10));
+    if (defaultToggle) select(defaultToggle, defaultMonths);
     else { host.setAttribute('data-empty', 'true'); host.innerHTML = ''; }
   }
 
@@ -492,6 +508,12 @@ import ChartDataLabels from 'chartjs-plugin-datalabels';
       });
   }
 
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
-  else boot();
+  /* Boot on Webflow's ready queue — the house pattern used by global.js,
+     animation.js, exit-intent.js, service.js, solution.js and rate-module.js.
+     It fires after webflow.js has initialised IX2 and the count-up widgets, so
+     the page is fully settled before we touch it. Note this makes webflow.js a
+     hard dependency: if it never loads, the queue never flushes and boot never
+     runs. That holds for every script in src/ and for every page on this site. */
+  window.Webflow ||= [];
+  window.Webflow.push(boot);
 })();

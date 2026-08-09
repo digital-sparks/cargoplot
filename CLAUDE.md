@@ -32,14 +32,27 @@ If a change genuinely requires touching the contract: **stop and flag it** — s
 what needs to change and why, and let a human make the corresponding Designer
 edit first. Do not make the change and note it afterwards.
 
-### 3. The JSON URL has no fallback
+### 3. Boot through Webflow's ready queue
+
+```js
+window.Webflow ||= [];
+window.Webflow.push(boot);
+```
+
+House pattern, shared with `global.js`, `animation.js`, `exit-intent.js`,
+`service.js`, `solution.js` and `rate-module.js`. It makes `webflow.js` a hard
+dependency — if it never loads, the queue never flushes and the script never
+runs. That is true of every script in `src/` and acceptable on this site. Don't
+switch back to `DOMContentLoaded` for one file.
+
+### 4. The JSON URL has no fallback
 
 The URL comes exclusively from the `[data-route-json]` attribute rendered by the
 CMS-bound embed. If it's missing or not `http(s)`, the script **exits silently**
 so non-route pages are unaffected. Never add a hardcoded/derived URL fallback,
 and never resolve route identity (port names, locodes) in JS — that is CMS-only.
 
-### 4. `chartjs-plugin-datalabels` is registered per-chart, never globally
+### 5. `chartjs-plugin-datalabels` is registered per-chart, never globally
 
 ```js
 new Chart(ctx, { /* ... */ plugins: [ChartDataLabels] });  // correct
@@ -48,10 +61,16 @@ Chart.register(ChartDataLabels);                           // NEVER
 
 Only the two bar charts (`weekly-delay`, `carrier-prices`) opt in. Registering
 globally puts value labels on the `price-history` and `transit-trend` line charts
-too. The import is `chart.js/auto`, which already registers the built-in
-controllers/scales — that is unrelated and fine.
+too.
 
-### 5. `dist/` is committed and must be rebuilt in the same commit as `src/`
+The file *does* call `Chart.register(...)` at the top — that is the **core
+component registry** (controllers, elements, scales, `Filler`, `Tooltip`) and is
+unrelated to this rule. Chart.js components are registered globally; the
+datalabels plugin is not. If you add a chart type, add its controller/element to
+that list — never add `ChartDataLabels` to it. Importing `chart.js/auto` instead
+would work but pulls in every unused controller for ~27kb.
+
+### 6. `dist/` is committed and must be rebuilt in the same commit as `src/`
 
 jsDelivr serves the bundle **straight out of this repo** — there is no CI build
 step. A `src/` change without its rebuilt `dist/` artifact in the *same commit*
