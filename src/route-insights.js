@@ -536,7 +536,13 @@ Chart.register(
      cheapest (index 0) gets the dark accent. */
   function renderCarrierPrices(host, priceByCarrier) {
     destroyChart('carrier-prices');
-    var items = (priceByCarrier && priceByCarrier.items) || [];
+    /* ATTRIBUTES.md documents this series as pre-sorted ascending, and index 0
+       gets the dark "cheapest" accent. Live payloads are not actually sorted
+       (observed: 530, 4000, 4600, 5200, 2350, …), which would hand the accent
+       to whichever carrier happens to be first. Sort defensively. */
+    var items = ((priceByCarrier && priceByCarrier.items) || []).slice().sort(function (a, b) {
+      return a.medianPrice - b.medianPrice;
+    });
     if (!items.length) {
       host.setAttribute('data-empty', 'true');
       host.innerHTML = '';
@@ -761,6 +767,51 @@ Chart.register(
     if (emptyCharts.length)
       problems.push('charts with no data in this JSON: ' + emptyCharts.join(', '));
 
+    /* Geometry. With maintainAspectRatio:false, Chart.js needs the container to
+       own its height and to be position:relative; otherwise the canvas falls
+       back to its 300x150 default and the chart renders collapsed inside a
+       full-size card. The tag checks above cannot see that — they were all
+       green while every chart on the page was squashed to 150px. Browser-only:
+       skipped where there is no layout engine. */
+    var geometry = [];
+    if (typeof window.getComputedStyle === 'function') {
+      EXPECTED_CHARTS.forEach(function (n) {
+        var el = document.querySelector('[data-route-chart="' + n + '"]');
+        if (!el || typeof el.getBoundingClientRect !== 'function') return;
+        var r = el.getBoundingClientRect();
+        geometry.push({
+          name: n,
+          height: Math.round(r.height),
+          width: Math.round(r.width),
+          position: window.getComputedStyle(el).position,
+        });
+      });
+      var collapsed = geometry
+        .filter(function (g) {
+          return g.height <= 150;
+        })
+        .map(function (g) {
+          return g.name;
+        });
+      var isStatic = geometry
+        .filter(function (g) {
+          return g.position === 'static';
+        })
+        .map(function (g) {
+          return g.name;
+        });
+      if (collapsed.length)
+        problems.push(
+          'chart containers collapsed to the 150px canvas default — give them a fixed height in the Designer: ' +
+            collapsed.join(', ')
+        );
+      if (isStatic.length)
+        problems.push(
+          'chart containers are position:static — Chart.js needs position:relative to size and resize correctly: ' +
+            isStatic.join(', ')
+        );
+    }
+
     /* The payload names the route it describes (origin/destination locodes).
        The script cannot verify that against the page automatically — route
        identity is CMS-only and no locode attributes exist here — so surface it
@@ -793,7 +844,12 @@ Chart.register(
         showingDash: blankFields,
       },
       trends: { tagged: trends, missing: absent(EXPECTED_TRENDS, trends) },
-      charts: { tagged: charts, missing: absent(EXPECTED_CHARTS, charts), empty: emptyCharts },
+      charts: {
+        tagged: charts,
+        missing: absent(EXPECTED_CHARTS, charts),
+        empty: emptyCharts,
+        geometry: geometry,
+      },
       windows: {
         tagged: windows,
         active: (
@@ -856,6 +912,19 @@ Chart.register(
     if (ri.url) document.documentElement.setAttribute('data-route-insights', status);
   }
 
+  /* Resolve a tagged element to its RAW number plus format. Exposed so the
+     count-up in animation.js can animate the number and hand formatting back
+     here — that file's own formatValue() rounds to integers and emits no
+     thousands separator, so letting it format these values would render 44.8
+     as "45" and $4,500 as "$4500" (and parseFloat("4,500") is 4). */
+  function fieldValue(el) {
+    var st = window.RouteInsights;
+    var key = el && el.getAttribute && el.getAttribute('data-route-field');
+    if (!key || !st || !st.data || !FIELDS[key]) return null;
+    var res = FIELDS[key](st.data, st.meta || {});
+    return { value: res.value, format: el.getAttribute('data-route-format') || res.format };
+  }
+
   /* Published at script-evaluation time — NOT inside boot() — so the console can
      tell apart three failures that otherwise look identical:
        ReferenceError                the bundle never loaded (bad CDN URL, or no
@@ -871,6 +940,8 @@ Chart.register(
     data: null,
     meta: null,
     error: null,
+    format: fmt,
+    fieldValue: fieldValue,
     httpStatus: null,
     ms: null,
     check: check,

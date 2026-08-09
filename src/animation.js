@@ -266,7 +266,7 @@ window.Webflow.push(() => {
 
   const targets = document.querySelectorAll('[data-element=counter]');
 
-  targets.forEach((target) => {
+  const initCounter = (target) => {
     const originalText = target.textContent.trim();
     const counter = { value: 0 };
 
@@ -352,5 +352,72 @@ window.Webflow.push(() => {
         // markers: true, // Remove in production
       },
     });
+  };
+
+  /* Counters that route-insights.js owns ([data-route-field] on a Routes page)
+     must not be measured until its JSON has landed. originalText is the
+     server-rendered CMS baseline; capturing it early makes the tween animate to
+     the stale figure and paint straight over the injected value — the symptom
+     was hero stats stuck at ~32% of the baseline, matching neither source.
+
+     Once the data is in we animate the raw number and let route-insights format
+     each frame, because formatValue() above rounds to integers and adds no
+     thousands separator (44.8 -> "45", $4,500 -> "$4500"). */
+  const onRoutePage = !!document.querySelector('[data-route-json]');
+  const isRouteDriven = (el) => el.hasAttribute('data-route-field');
+
+  const initRouteCounter = (target) => {
+    const ri = window.RouteInsights;
+    const resolved = ri && ri.fieldValue ? ri.fieldValue(target) : null;
+    // Names, em-dashes and "~1 per week" are not countable — route-insights has
+    // already written the right text, so leave those elements alone.
+    if (!resolved || typeof resolved.value !== 'number') return;
+    if (resolved.format === 'text' || resolved.format === 'frequency') return;
+
+    const counter = { value: 0 };
+    target.textContent = ri.format(0, resolved.format);
+
+    gsap.to(counter, {
+      value: resolved.value,
+      duration: 2,
+      ease: 'power2.out',
+      onUpdate: function () {
+        target.textContent = ri.format(counter.value, resolved.format);
+      },
+      onComplete: function () {
+        // Land on the exact value, not the tween's final float.
+        target.textContent = ri.format(resolved.value, resolved.format);
+      },
+      scrollTrigger: {
+        trigger: target,
+        start: 'top 80%',
+        end: 'bottom 20%',
+        toggleActions: 'play none none none',
+        once: true,
+      },
+    });
+  };
+
+  const deferred = [];
+  targets.forEach((target) => {
+    if (onRoutePage && isRouteDriven(target)) deferred.push(target);
+    else initCounter(target);
   });
+
+  if (deferred.length) {
+    let started = false;
+    const start = (withRouteData) => {
+      if (started) return;
+      started = true;
+      deferred.forEach(withRouteData ? initRouteCounter : initCounter);
+    };
+
+    if (window.RouteInsights && window.RouteInsights.status === 'ready') start(true);
+    else {
+      document.addEventListener('route-insights:ready', () => start(true), { once: true });
+      // If the JSON never arrives, animate the CMS baselines rather than
+      // leaving these stats frozen — Option B keeps them valid on screen.
+      setTimeout(() => start(false), 5000);
+    }
+  }
 });
