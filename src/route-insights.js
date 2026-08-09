@@ -525,7 +525,9 @@ Chart.register(
       return !!el && el.getAttribute('data-empty') === 'true';
     });
 
-    if (state.status === 'no-url') {
+    if (state.status === 'idle') {
+      problems.push('script loaded but never booted — window.Webflow never flushed its queue (is webflow.js on the page?)');
+    } else if (state.status === 'no-url') {
       problems.push('no [data-route-json] URL on the page — the CMS "JSON" field is empty for this route');
     } else if (state.status === 'error') {
       problems.push('JSON failed to load from ' + state.url + ' — ' + state.error);
@@ -602,18 +604,24 @@ Chart.register(
     if (ri.url) document.documentElement.setAttribute('data-route-insights', status);
   }
 
+  /* Published at script-evaluation time — NOT inside boot() — so the console can
+     tell apart three failures that otherwise look identical:
+       ReferenceError                the bundle never loaded (bad CDN URL, or no
+                                     <script> tag on the page)
+       status 'idle'                 bundle loaded, but Webflow's queue never
+                                     flushed, so boot() never ran
+       status 'no-url'               booted fine, but the CMS "JSON" field is empty
+     NOTE: `window.RouteInsights` existing therefore does not imply the data
+     loaded; test `RouteInsights.status === 'ready'` instead. */
+  window.RouteInsights = {
+    status: 'idle', url: null, data: null, meta: null,
+    error: null, httpStatus: null, ms: null, check: check
+  };
+
   function boot() {
     var url = resolveUrl();
     var debug = /[?&]route-debug\b/.test(window.location.search);
-
-    /* Publish the namespace immediately — before the fetch, and even on pages
-       that have no URL — so check() can always explain what happened. NOTE:
-       this means `window.RouteInsights` existing no longer implies the data
-       loaded; test `RouteInsights.status === 'ready'` instead. */
-    window.RouteInsights = {
-      status: 'idle', url: url, data: null, meta: null,
-      error: null, httpStatus: null, ms: null, check: check
-    };
+    window.RouteInsights.url = url;
 
     if (!url) {
       setState('no-url');

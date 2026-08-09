@@ -158,6 +158,18 @@ elements or hook the animation to `route-insights:ready`.
 URL, so `if (window.RouteInsights)` is no longer a "did it load?" test — check
 `window.RouteInsights.status === 'ready'` instead.
 
+### Troubleshooting ladder
+
+Paste `RouteInsights.status` into the console; the answer names the layer:
+
+| Symptom | Layer that's broken |
+|---|---|
+| `Uncaught ReferenceError: RouteInsights is not defined` | The bundle never loaded. The `<script>` tag is missing from the Routes template, or its URL 404s. Open the URL directly — jsDelivr returns a plain-text "Couldn't find the requested file" when the ref or path is wrong. |
+| `'idle'` | Bundle loaded, but `window.Webflow` never flushed, so `boot()` never ran. Check webflow.js is on the page. |
+| `'no-url'` | Booted, but the CMS **JSON** field is empty on this route item. |
+| `'error'` | Fetch failed — see `.error` / `.httpStatus`. A missing `Access-Control-Allow-Origin` on the S3 object shows up here. |
+| `'ready'` but wrong numbers | The JSON loaded from the wrong URL. `RouteInsights.url` is the file actually fetched — the script cannot detect a mismatch on its own, because route identity is CMS-only (no locode attributes exist on the page). Eyeball the filename. |
+
 ### `RouteInsights.check()`
 
 Verifies in one call that the script ran, the JSON arrived, and the page carries
