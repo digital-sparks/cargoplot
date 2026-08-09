@@ -35,6 +35,8 @@
   },
   "dependencies": {
     "air-datepicker": "^3.6.0",
+    "chart.js": "^4.5.1",
+    "chartjs-plugin-datalabels": "^2.2.0",
     "gsap": "^3.13.0",
     "swiper": "^11.2.6"
   }
