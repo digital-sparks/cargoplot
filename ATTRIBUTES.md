@@ -168,7 +168,13 @@ Paste `RouteInsights.status` into the console; the answer names the layer:
 | `'idle'` | Bundle loaded, but `window.Webflow` never flushed, so `boot()` never ran. Check webflow.js is on the page. |
 | `'no-url'` | Booted, but the CMS **JSON** field is empty on this route item. |
 | `'error'` | Fetch failed — see `.error` / `.httpStatus`. A missing `Access-Control-Allow-Origin` on the S3 object shows up here. |
-| `'ready'` but wrong numbers | The JSON loaded from the wrong URL. `RouteInsights.url` is the file actually fetched — the script cannot detect a mismatch on its own, because route identity is CMS-only (no locode attributes exist on the page). Eyeball the filename. |
+| `'ready'` but wrong numbers | The JSON loaded from the wrong URL — a URL pasted onto the wrong CMS item. `check()` prints the payload's own locodes (`CNSHG → NLRTM`) in its summary line; compare them to the page you're on. The script **cannot** fail automatically on a mismatch: the payload knows its identity but the page carries none to check it against. |
+
+> **Possible hardening (contract change — needs sign-off).** The JSON does carry
+> `origin.locode` / `destination.locode`. Adding one attribute to the template,
+> e.g. `data-route-expect="CNTAO-GBFXT"` bound to a CMS field, would let the
+> script refuse to render on a mismatch instead of showing another route's
+> numbers. That adds a `data-route-*` name, so it is not being done unilaterally.
 
 ### `RouteInsights.check()`
 

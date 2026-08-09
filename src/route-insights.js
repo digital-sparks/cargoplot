@@ -543,11 +543,27 @@ Chart.register(
     if (!windows.length) problems.push('no [data-route-window] toggles — price chart defaults to 12M');
     if (emptyCharts.length) problems.push('charts with no data in this JSON: ' + emptyCharts.join(', '));
 
+    /* The payload names the route it describes (origin/destination locodes).
+       The script cannot verify that against the page automatically — route
+       identity is CMS-only and no locode attributes exist here — so surface it
+       for a human to eyeball. A JSON URL pasted onto the wrong CMS item is
+       otherwise invisible: the page renders confidently wrong numbers. */
+    var payload = state.data;
+    var routeId = payload && payload.origin && payload.destination
+      ? (payload.origin.locode || '?') + ' → ' + (payload.destination.locode || '?')
+      : null;
+
     var report = {
       ok: problems.length === 0,
       problems: problems,
       status: state.status,
-      json: { url: state.url || null, httpStatus: state.httpStatus, ms: state.ms, publishedAt: state.meta && state.meta.publishedAt },
+      json: {
+        url: state.url || null,
+        route: routeId,
+        httpStatus: state.httpStatus,
+        ms: state.ms,
+        publishedAt: state.meta && state.meta.publishedAt
+      },
       fields: {
         tagged: fields.length,
         expected: EXPECTED_FIELDS.length + 1, // + dataAge
@@ -572,9 +588,10 @@ Chart.register(
     };
 
     var head = report.ok
-      ? '✅ route-insights OK — ' + report.fields.tagged + ' fields, ' +
-        report.charts.tagged.length + ' charts, JSON ' + (state.ms != null ? state.ms + 'ms' : 'n/a')
-      : '⚠️ route-insights: ' + problems.length + ' issue(s)';
+      ? '✅ route-insights OK — ' + (routeId ? routeId + ', ' : '') + report.fields.tagged +
+        ' fields, ' + report.charts.tagged.length + ' charts, JSON ' +
+        (state.ms != null ? state.ms + 'ms' : 'n/a')
+      : '⚠️ route-insights: ' + problems.length + ' issue(s)' + (routeId ? ' — JSON is ' + routeId : '');
 
     if (console.groupCollapsed) {
       console.groupCollapsed(head);
