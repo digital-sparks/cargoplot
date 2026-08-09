@@ -148,9 +148,41 @@ elements or hook the animation to `route-insights:ready`.
 
 ## Runtime API / debugging
 
-- `window.RouteInsights = { url, data, meta }` after load
-- `route-insights:ready` CustomEvent on `document`
-- fetch failure → `<html data-route-insights="error">`, CMS baselines remain
+- `window.RouteInsights = { status, url, data, meta, error, httpStatus, ms, check }`
+- `route-insights:ready` CustomEvent on `document` (fires only on `status: 'ready'`)
+- `<html data-route-insights="loading|ready|error">` — set on route pages only;
+  a page with no `[data-route-json]` is never tagged. `error` still means the
+  fetch failed and the CMS baselines remain on screen.
+
+⚠️ The namespace is now published **before** the fetch and also on pages with no
+URL, so `if (window.RouteInsights)` is no longer a "did it load?" test — check
+`window.RouteInsights.status === 'ready'` instead.
+
+### `RouteInsights.check()`
+
+Verifies in one call that the script ran, the JSON arrived, and the page carries
+the attributes this document specifies. Returns a report object and prints a
+collapsed console summary. Add **`?route-debug`** to any route URL to run it
+automatically on load.
+
+```js
+RouteInsights.check().ok        // true when there are no problems
+RouteInsights.check().problems  // ['untagged fields: marketPrice', …]
+```
+
+| Reported | Meaning |
+|---|---|
+| `problems` | Everything wrong, in plain English. Empty ⇒ healthy. |
+| `fields.missing` | Fields this doc marks ✅ that carry no element on the page |
+| `fields.unknown` | `data-route-field` values with no resolver — typo in the Designer |
+| `fields.pendingUntagged` | The ⏳ FCL/LCL fields, still expected to be absent |
+| `fields.showingDash` | Tagged, resolved, but `—` because `sampleSize: 0` |
+| `charts.missing` / `charts.empty` | Container absent vs present-but-no-data |
+| `windows.active` / `windows.disabled` | Which price window won, which have no data |
+
+`fields.missing` asserts against a list hardcoded in `src/route-insights.js`
+(`EXPECTED_FIELDS` / `PENDING_FIELDS`) that mirrors the ✅/⏳ column above — when
+open item 1 lands, move those four keys across so the checker stops excusing them.
 
 ## Open items
 

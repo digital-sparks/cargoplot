@@ -79,6 +79,26 @@ ships stale code to production.
 `dist/` is deliberately **not** gitignored (note the commented-out `#dist` at the
 bottom of [.gitignore](.gitignore)). Never re-enable that line.
 
+## Checking a live page
+
+```
+https://<route-url>?route-debug
+```
+
+Runs `RouteInsights.check()` on load and prints a console summary: script status,
+JSON timing, and every missing/typo'd/empty `data-route-*` tag. Same thing from
+the console on any route page:
+
+```js
+RouteInsights.check()          // report object, plus a readable summary
+RouteInsights.status           // 'no-url' | 'loading' | 'ready' | 'error'
+```
+
+`EXPECTED_FIELDS` / `PENDING_FIELDS` in `src/route-insights.js` mirror the ✅/⏳
+column of ATTRIBUTES.md's field table. Keep them in sync — a key that gets tagged
+in the Designer must move from `PENDING_FIELDS` to `EXPECTED_FIELDS` or the
+checker will keep excusing its absence.
+
 ## Build
 
 ```bash

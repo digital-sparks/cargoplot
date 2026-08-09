@@ -468,6 +468,123 @@ Chart.register(
     else { host.setAttribute('data-empty', 'true'); host.innerHTML = ''; }
   }
 
+  /* ------------------------------------------------------ diagnostics */
+  /* window.RouteInsights.check() — answers "did it load, is everything
+     tagged, did the JSON arrive?" in one call. Returns a report object and
+     prints a readable summary. Auto-runs when the URL carries ?route-debug,
+     so this can be checked on a live Webflow page without the console. */
+
+  /* What ATTRIBUTES.md says the template should carry. That file is the source
+     of truth — this is only what the checker asserts against, so move a key
+     from PENDING_FIELDS to EXPECTED_FIELDS as the Designer work lands. */
+  var EXPECTED_FIELDS = [
+    'activeCarriers', 'avgWeeklySailings', 'sailingsFrequency',
+    'transitTime', 'onTimeRate', 'marketPrice',
+    'departureDelay', 'arrivalDelay',
+    'fastestCarrierName', 'fastestCarrierDays',
+    'mostReliableCarrierName', 'reliableOnTimeRate', 'reliableEtdVariance', 'reliableEtaVariance'
+  ];
+  var PENDING_FIELDS = ['fclSharePct', 'fclPriceFrom', 'lclSharePct', 'lclPriceCbm'];
+  var EXPECTED_TRENDS = ['transitTime', 'onTimeRate', 'marketPrice'];
+  var EXPECTED_CHARTS = ['price-history', 'weekly-delay', 'transit-trend', 'carrier-prices'];
+
+  function tagValues(attr) {
+    return Array.prototype.map.call(
+      document.querySelectorAll('[' + attr + ']'),
+      function (el) { return el.getAttribute(attr); }
+    );
+  }
+
+  function absent(expected, found) {
+    return expected.filter(function (k) { return found.indexOf(k) === -1; });
+  }
+
+  function check() {
+    var state = window.RouteInsights || {};
+    var fields = tagValues('data-route-field');
+    var trends = tagValues('data-route-trend');
+    var charts = tagValues('data-route-chart');
+    var windows = tagValues('data-route-window');
+    var problems = [];
+
+    // The hero carries one of dataAgeHours / dataAgeDays, not both.
+    var hasDataAge = fields.indexOf('dataAgeHours') !== -1 || fields.indexOf('dataAgeDays') !== -1;
+    var missingFields = absent(EXPECTED_FIELDS, fields);
+    var unknownFields = fields.filter(function (k) { return !FIELDS[k]; });
+    var pendingFound = PENDING_FIELDS.filter(function (k) { return fields.indexOf(k) !== -1; });
+
+    // Tagged but showing the em-dash => resolver ran and the JSON had no sample.
+    var blankFields = Array.prototype.filter
+      .call(document.querySelectorAll('[data-route-field]'), function (el) {
+        return el.textContent === '—';
+      })
+      .map(function (el) { return el.getAttribute('data-route-field'); });
+
+    var emptyCharts = EXPECTED_CHARTS.filter(function (n) {
+      var el = document.querySelector('[data-route-chart="' + n + '"]');
+      return !!el && el.getAttribute('data-empty') === 'true';
+    });
+
+    if (state.status === 'no-url') {
+      problems.push('no [data-route-json] URL on the page — the CMS "JSON" field is empty for this route');
+    } else if (state.status === 'error') {
+      problems.push('JSON failed to load from ' + state.url + ' — ' + state.error);
+    } else if (state.status !== 'ready') {
+      problems.push('script has not finished loading (status: ' + state.status + ')');
+    }
+    if (!fields.length && !charts.length) problems.push('no data-route-* attributes found at all — wrong page, or the Designer tags are missing');
+    if (missingFields.length) problems.push('untagged fields: ' + missingFields.join(', '));
+    if (!hasDataAge) problems.push('untagged field: dataAgeHours or dataAgeDays');
+    if (unknownFields.length) problems.push('unknown data-route-field values (typo?): ' + unknownFields.join(', '));
+    if (absent(EXPECTED_TRENDS, trends).length) problems.push('untagged trends: ' + absent(EXPECTED_TRENDS, trends).join(', '));
+    if (absent(EXPECTED_CHARTS, charts).length) problems.push('missing chart containers: ' + absent(EXPECTED_CHARTS, charts).join(', '));
+    if (!windows.length) problems.push('no [data-route-window] toggles — price chart defaults to 12M');
+    if (emptyCharts.length) problems.push('charts with no data in this JSON: ' + emptyCharts.join(', '));
+
+    var report = {
+      ok: problems.length === 0,
+      problems: problems,
+      status: state.status,
+      json: { url: state.url || null, httpStatus: state.httpStatus, ms: state.ms, publishedAt: state.meta && state.meta.publishedAt },
+      fields: {
+        tagged: fields.length,
+        expected: EXPECTED_FIELDS.length + 1, // + dataAge
+        missing: missingFields.concat(hasDataAge ? [] : ['dataAgeHours|dataAgeDays']),
+        unknown: unknownFields,
+        pendingTagged: pendingFound,
+        pendingUntagged: absent(PENDING_FIELDS, fields),
+        showingDash: blankFields
+      },
+      trends: { tagged: trends, missing: absent(EXPECTED_TRENDS, trends) },
+      charts: { tagged: charts, missing: absent(EXPECTED_CHARTS, charts), empty: emptyCharts },
+      windows: {
+        tagged: windows,
+        active: (document.querySelector('[data-route-window].is-active') || {
+          getAttribute: function () { return null; }
+        }).getAttribute('data-route-window'),
+        disabled: Array.prototype.map.call(
+          document.querySelectorAll('[data-route-window].is-disabled'),
+          function (el) { return el.getAttribute('data-route-window'); }
+        )
+      }
+    };
+
+    var head = report.ok
+      ? '✅ route-insights OK — ' + report.fields.tagged + ' fields, ' +
+        report.charts.tagged.length + ' charts, JSON ' + (state.ms != null ? state.ms + 'ms' : 'n/a')
+      : '⚠️ route-insights: ' + problems.length + ' issue(s)';
+
+    if (console.groupCollapsed) {
+      console.groupCollapsed(head);
+      problems.forEach(function (p) { console.warn('• ' + p); });
+      console.log('report', report);
+      console.groupEnd();
+    } else {
+      console.log(head, report);
+    }
+    return report;
+  }
+
   /* ------------------------------------------------------------- boot */
 
   function resolveUrl() {
@@ -476,12 +593,43 @@ Chart.register(
     return url && url.indexOf('http') === 0 ? url : null;
   }
 
+  function setState(status, extra) {
+    var ri = window.RouteInsights;
+    ri.status = status;
+    if (extra) for (var k in extra) ri[k] = extra[k];
+    // Mirror onto <html> so state is visible in the element inspector. Only on
+    // route pages — never tag a page that has no [data-route-json].
+    if (ri.url) document.documentElement.setAttribute('data-route-insights', status);
+  }
+
   function boot() {
     var url = resolveUrl();
-    if (!url) return; // not a route page / not configured
+    var debug = /[?&]route-debug\b/.test(window.location.search);
+
+    /* Publish the namespace immediately — before the fetch, and even on pages
+       that have no URL — so check() can always explain what happened. NOTE:
+       this means `window.RouteInsights` existing no longer implies the data
+       loaded; test `RouteInsights.status === 'ready'` instead. */
+    window.RouteInsights = {
+      status: 'idle', url: url, data: null, meta: null,
+      error: null, httpStatus: null, ms: null, check: check
+    };
+
+    if (!url) {
+      setState('no-url');
+      if (debug) check();
+      return; // not a route page / CMS "JSON" field empty
+    }
+
+    var t0 = Date.now();
+    setState('loading');
 
     fetch(url)
-      .then(function (res) { if (!res.ok) throw new Error('HTTP ' + res.status); return res.json(); })
+      .then(function (res) {
+        window.RouteInsights.httpStatus = res.status;
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        return res.json();
+      })
       .then(function (data) {
         // Support both envelopes: per-route file ({route:{...}} or bare RouteInsight)
         var route = data.route || data;
@@ -499,12 +647,14 @@ Chart.register(
         var carrierHost = document.querySelector('[data-route-chart="carrier-prices"]');
         if (carrierHost) renderCarrierPrices(carrierHost, route.priceByCarrier);
 
-        window.RouteInsights = { url: url, data: route, meta: meta };
+        setState('ready', { data: route, meta: meta, ms: Date.now() - t0 });
         document.dispatchEvent(new CustomEvent('route-insights:ready', { detail: window.RouteInsights }));
+        if (debug) check();
       })
       .catch(function (err) {
+        setState('error', { error: err.message, ms: Date.now() - t0 });
         console.error('[route-insights] failed:', err);
-        document.documentElement.setAttribute('data-route-insights', 'error');
+        if (debug) check();
       });
   }
 
