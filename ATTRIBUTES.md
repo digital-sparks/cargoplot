@@ -161,11 +161,26 @@ URL — bind it from the referenced item's CMS **JSON** field:
 
 ```html
 <div class="routes_card" data-route-card="{{ related item: JSON }}">
-  <div data-route-field="transitTime">27</div>
-  <div data-route-field="marketPrice">3185</div>
-  <div data-route-field="onTimeRate">91.4</div>
+  <div data-route-field="transitTime">27</div><div>d</div>
+  <div>$</div><div data-route-field="marketPrice" data-route-format="count">3185</div>
+  <div data-route-field="onTimeRate" data-route-format="days">91.4</div><div>%</div>
 </div>
 ```
+
+⚠️ **Carry the same `data-route-format` overrides the hero uses.** Units live in
+sibling elements on this page, so the default formats would double them —
+`money` emits `$4,500` next to a `$` sibling, `pct` emits `57.1%` next to a `%`
+sibling. The overrides strip the unit and leave the bare number:
+
+| Field | Default | Emits | Page override | Emits |
+|---|---|---|---|---|
+| marketPrice | money | `$4,500` | **count** | `4,500` |
+| onTimeRate | pct | `57.1%` | **days** | `57.1` |
+| departureDelay / arrivalDelay | signed-days | `+1.7d` | **days** | `1.7` |
+| transitTime | days | `44.8` | *(none needed)* | `44.8` |
+
+(`days` is doing duty as "plain number, one decimal" — it is what the hero
+already uses on `onTimeRate` and `reliableOnTimeRate`.)
 
 Inside a card, `data-route-field` and `data-route-format` behave exactly as on
 the main page — same keys, same resolvers, same formats. The page's own payload
