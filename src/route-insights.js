@@ -61,7 +61,6 @@ Chart.register(
     track: '#E3E8E7',
     grid: '#E3E8E7',
     tick: '#4B6661',
-    amber: '#F5C640',
     inProgress: 'rgba(174, 186, 184, 0.45)',
   };
 
@@ -334,6 +333,12 @@ Chart.register(
 
     var b = opts.bounds(Math.min.apply(null, present), Math.max.apply(null, present));
 
+    /* Left-align the y-axis labels. Chart.js defaults to crossAlign 'near',
+       which right-aligns them against the axis; 'far' pushes them to the outer
+       edge of the label area so $3,906 and $2,631 start at the same x. */
+    var yTicks = opts.ticks(b);
+    yTicks.crossAlign = 'far';
+
     var options = {
       responsive: true,
       maintainAspectRatio: false,
@@ -356,7 +361,7 @@ Chart.register(
         y: {
           border: { display: false },
           grid: { color: COLORS.grid, drawTicks: false },
-          ticks: opts.ticks(b),
+          ticks: yTicks,
           min: b.min,
           max: b.max,
         },
@@ -448,7 +453,7 @@ Chart.register(
        bar on every frame of the draw/hover/resize cycle. */
     var barColors = pts.map(function (p, i) {
       if (!p || p.inProgress) return COLORS.inProgress;
-      return values[i] >= threshold ? COLORS.amber : COLORS.accent;
+      return values[i] >= threshold ? COLORS.grey : COLORS.accent;
     });
     var barBorders = pts.map(function (p) {
       return p && p.inProgress ? COLORS.grey : 'transparent';
@@ -487,8 +492,9 @@ Chart.register(
             align: 'end',
             color: COLORS.dark,
             font: { weight: '600', size: 16 },
+            // Raw API values carry full precision (4.3333) — one decimal only.
             formatter: function (v) {
-              return v === null ? '' : v;
+              return v === null ? '' : fmt(v, 'days');
             },
           },
         },
@@ -558,6 +564,29 @@ Chart.register(
     });
     var trackMax = Math.ceil((Math.max.apply(null, prices) * 1.2) / 500) * 500;
 
+    /* Mobile: the desktop sizing (80px right gutter, 18px price labels, 16px
+       carrier names) does not fit a ~340px viewport — the price labels collide
+       with the track and the names truncate. Scale the chrome down with the
+       chart, and re-apply on resize so rotating the phone re-flows it. */
+    function carrierScale(width) {
+      if (width < 420) return { pad: 40, price: 12, offset: 6, name: 11, namePad: 6, bar: 10 };
+      if (width < 640) return { pad: 56, price: 14, offset: 10, name: 13, namePad: 10, bar: 12 };
+      return { pad: 80, price: 18, offset: 16, name: 16, namePad: 16, bar: 14 };
+    }
+
+    function applyCarrierScale(chart, width) {
+      var s = carrierScale(width);
+      chart.options.layout.padding.right = s.pad;
+      chart.options.scales.y.ticks.font.size = s.name;
+      chart.options.scales.y.ticks.padding = s.namePad;
+      chart.data.datasets[0].barThickness = s.bar;
+      chart.data.datasets[1].barThickness = s.bar;
+      chart.data.datasets[0].datalabels.font.size = s.price;
+      chart.data.datasets[0].datalabels.offset = s.offset;
+    }
+
+    var init = carrierScale(host.clientWidth || 600);
+
     chartInstances['carrier-prices'] = new Chart(mountCanvas(host), {
       type: 'bar',
       data: {
@@ -568,16 +597,16 @@ Chart.register(
               return trackMax;
             }),
             backgroundColor: COLORS.track,
-            barThickness: 14,
+            barThickness: init.bar,
             grouped: false,
             order: 2,
             borderSkipped: false,
             datalabels: {
               anchor: 'end',
               align: 'end',
-              offset: 16,
+              offset: init.offset,
               color: COLORS.tick,
-              font: { size: 18, weight: 'bold' },
+              font: { size: init.price, weight: 'bold' },
               formatter: function (v, c) {
                 return fmt(prices[c.dataIndex], 'money');
               },
@@ -588,7 +617,7 @@ Chart.register(
             backgroundColor: function (c) {
               return c.dataIndex === 0 ? COLORS.dark : COLORS.accent;
             },
-            barThickness: 14,
+            barThickness: init.bar,
             grouped: false,
             order: 1,
             borderSkipped: false,
@@ -601,14 +630,19 @@ Chart.register(
         indexAxis: 'y',
         responsive: true,
         maintainAspectRatio: false,
-        layout: { padding: { right: 80 } },
+        layout: { padding: { right: init.pad } },
+        // Chart.js calls this after it resizes but before the next draw, so
+        // mutating options here lands without forcing an extra update pass.
+        onResize: function (chart, size) {
+          applyCarrierScale(chart, size.width);
+        },
         plugins: { legend: { display: false }, tooltip: { enabled: false } },
         scales: {
           x: { display: false, min: 0, max: trackMax },
           y: {
             grid: { display: false },
             border: { display: false },
-            ticks: { font: { size: 16, weight: '500' }, color: COLORS.tick, padding: 16 },
+            ticks: { font: { size: init.name, weight: '500' }, color: COLORS.tick, padding: init.namePad },
           },
         },
       },
