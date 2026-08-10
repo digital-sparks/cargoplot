@@ -96,7 +96,13 @@ Chart.register(
     switch (kind) {
       case 'money':
         return '$' + Math.round(value).toLocaleString(LOCALE);
+      /* 'days' and 'count' emit no unit — the unit lives in a sibling element.
+         That makes them the formats to reach for when overriding a field whose
+         default would add one, which is how a percentage ends up asking for
+         "days". 'number' / 'integer' are aliases that say so out loud; the
+         originals stay valid, so nothing in the Designer has to change. */
       case 'days':
+      case 'number':
         return (Math.round(value * 10) / 10).toLocaleString(LOCALE);
       case 'pct':
         return (Math.round(value * 10) / 10).toLocaleString(LOCALE) + '%';
@@ -114,6 +120,7 @@ Chart.register(
         return '~' + Math.round(value * 4.3) + ' per month';
       }
       case 'count':
+      case 'integer':
         return Math.round(value).toLocaleString(LOCALE);
       default:
         return String(value);

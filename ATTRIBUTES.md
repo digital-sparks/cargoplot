@@ -71,6 +71,19 @@ Optional `data-route-format` overrides the default
 (money | days | pct | signed-days | frequency | count | text).
 Units live in **separate sibling elements** (already the pattern on the page).
 
+Because of that, the two **unit-less** formats are what you reach for when
+overriding a field whose default would emit one — which is why the hero tags a
+percentage as `days`. `number` / `integer` are aliases that say so plainly; the
+original names remain valid, so nothing already in the Designer needs changing.
+
+| Format | Emits (4500 / 57.14 / 1.72) | Unit? |
+|---|---|---|
+| money | `$4,500` | adds `$` |
+| pct | `57.1%` | adds `%` |
+| signed-days | `+1.7d` | adds sign + `d` |
+| **count** = **integer** | `4,500` | none |
+| **days** = **number** | `57.1` | none |
+
 | Value | JSON source | Format | On page? |
 |---|---|---|---|
 | activeCarriers | activeCarriers | count | ✅ hero stat + KPI-row sub-line |
