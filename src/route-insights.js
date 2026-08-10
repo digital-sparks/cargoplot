@@ -343,6 +343,27 @@ Chart.register(
     }
   }
 
+  /* Round a raw range out to bounds that sit ON a round step, and report that
+     step so the axis can be told to use it. Without this an explicit min like
+     37 gets its own label directly beneath the first generated tick (38), and
+     the two collide. Returns { min, max, step }. */
+  function niceScale(min, max, targetTicks) {
+    if (!(max > min)) {
+      // Flat series: open out a symmetric window so the axis stays sane.
+      var pad = Math.abs(max) * 0.1 || 1;
+      min = max - pad;
+      max = max + pad;
+    }
+    var rough = (max - min) / (targetTicks || 6);
+    var mag = Math.pow(10, Math.floor(Math.log10(rough)));
+    var norm = rough / mag;
+    var step = (norm <= 1 ? 1 : norm <= 2 ? 2 : norm <= 5 ? 5 : 10) * mag;
+    var lo = Math.max(0, Math.floor(min / step) * step);
+    var hi = Math.ceil(max / step) * step;
+    if (hi <= lo) hi = lo + step;
+    return { min: lo, max: hi, step: step };
+  }
+
   /* Shared renderer for the two line charts. They differ only in y-scale
      bounds, tick/tooltip formatting, point size and layout padding; the dark
      line, accent fill, gaps at sampleSize 0 and the accent dot on the last real
@@ -614,10 +635,11 @@ Chart.register(
     renderLineChart('transit-trend', host, series.points, {
       pointRadius: 5,
       bounds: function (min, max) {
-        return { min: Math.max(0, Math.floor(min * 0.9)), max: Math.ceil(max * 1.08) };
+        return niceScale(min * 0.9, max * 1.08, 8);
       },
-      ticks: function () {
+      ticks: function (b) {
         return {
+          stepSize: b.step,
           callback: function (v) {
             return v + 'd';
           },
