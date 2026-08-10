@@ -119,7 +119,7 @@ mockup image that must be deleted.
 | Value | Series | Behaviour |
 |---|---|---|
 | price-history | historicalPrice (24 mo) | client-side window slicing; gaps for sampleSize 0 (spanGaps:false); accent dot on last datapoint |
-| weekly-delay | weeklyDelayCongestion | green < 2.5d threshold, amber ≥; inProgress week dashed/greyed; gaps for empty weeks; negative (early) values supported |
+| weekly-delay | weeklyDelayCongestion | green < 2.5d threshold (`thresholdDays`, default 2.5), grey ≥; ISO week-number labels computed from each point's `at`; last 8 points only; inProgress week filled with a 45° grey hatch + dashed border (only visible once that week has `sampleSize > 0`); gaps for empty weeks; negative (early) values supported; no hover (`events: []`); bars animate on scroll-in |
 | transit-trend | monthlyTransitTrend | 12 months ending 2 months back — never label as "today" |
 | carrier-prices | priceByCarrier | horizontal track bars, JSON pre-sorted ascending, cheapest gets dark accent |
 

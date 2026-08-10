@@ -61,7 +61,7 @@ Chart.register(
     track: '#E3E8E7',
     grid: '#E3E8E7',
     tick: '#4B6661',
-    inProgress: 'rgba(174, 186, 184, 0.45)',
+    inProgress: 'rgba(174, 186, 184, 0.15)', // wash behind the in-progress hatch
   };
 
   // Matches the family declared in the Webflow stylesheet — Chart.js draws to
@@ -460,11 +460,60 @@ Chart.register(
     });
   }
 
-  /* Weekly delay: 8 ISO weeks. Colour by threshold (green/amber),
+  /* ISO-8601 week number taken from the point's own timestamp. Spec Block 05
+     asks for week labels computed from the `at` values; the positional W1..W8
+     labels looked right but told the reader nothing about which weeks these
+     were. Falls back to the position when a timestamp is missing or unparseable. */
+  function isoWeekLabel(at, index) {
+    var d = at ? new Date(at) : null;
+    if (!d || isNaN(d.getTime())) return 'W' + (index + 1);
+    var t = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+    // Step to the Thursday of this ISO week — that day fixes which year owns it,
+    // so weeks spanning New Year number correctly (…W52, W53, W1).
+    t.setUTCDate(t.getUTCDate() + 4 - (t.getUTCDay() || 7));
+    var yearStart = Date.UTC(t.getUTCFullYear(), 0, 1);
+    return 'W' + Math.ceil(((t - yearStart) / 864e5 + 1) / 7);
+  }
+
+  /* Diagonal hatch for the in-progress week, so a partial week reads as
+     provisional rather than as a finished measurement (spec Block 05: "render
+     distinctly"). Chart.js accepts a CanvasPattern anywhere a colour goes.
+     Falls back to the flat wash where there is no real 2D context. */
+  function stripeFill(stripe, base) {
+    var c = document.createElement('canvas');
+    c.width = 8;
+    c.height = 8;
+    var g = typeof c.getContext === 'function' ? c.getContext('2d') : null;
+    if (!g || typeof g.createPattern !== 'function') return base;
+    g.fillStyle = base;
+    g.fillRect(0, 0, 8, 8);
+    g.strokeStyle = stripe;
+    g.lineWidth = 2;
+    g.beginPath();
+    // Three segments so the 45° hatch tiles across the 8px cell without seams.
+    g.moveTo(-2, 10);
+    g.lineTo(10, -2);
+    g.moveTo(-2, 2);
+    g.lineTo(2, -2);
+    g.moveTo(6, 10);
+    g.lineTo(10, 6);
+    g.stroke();
+    return g.createPattern(c, 'repeat');
+  }
+
+  /* Weekly delay: 8 ISO weeks. Colour by threshold (green/grey),
      inProgress bar rendered distinctly, sampleSize:0 => gap bar. */
   function renderWeeklyDelay(host, series) {
     destroyChart('weekly-delay');
-    var pts = series.points;
+    /* The card is headed "last 8 weeks" (spec Block 05), so trim rather than
+       silently widening the chart if the API ever sends a longer series. */
+    var pts = series.points || [];
+    if (pts.length > 8) {
+      console.warn(
+        '[route-insights] weeklyDelayCongestion returned ' + pts.length + ' points; showing the last 8'
+      );
+      pts = pts.slice(-8);
+    }
     var threshold = typeof series.thresholdDays === 'number' ? series.thresholdDays : 2.5;
     var values = pts.map(function (p) {
       return p.sampleSize > 0 ? p.value : null;
@@ -480,8 +529,9 @@ Chart.register(
     /* Per-bar styling resolved once into arrays. Chart.js accepts arrays here,
        so this drops three scriptable callbacks that otherwise re-run for every
        bar on every frame of the draw/hover/resize cycle. */
+    var inProgressFill = stripeFill(COLORS.grey, COLORS.inProgress);
     var barColors = pts.map(function (p, i) {
-      if (!p || p.inProgress) return COLORS.inProgress;
+      if (!p || p.inProgress) return inProgressFill;
       return values[i] >= threshold ? COLORS.grey : COLORS.accent;
     });
     var barBorders = pts.map(function (p) {
@@ -495,7 +545,7 @@ Chart.register(
       type: 'bar',
       data: {
         labels: pts.map(function (p, i) {
-          return 'W' + (i + 1);
+          return isoWeekLabel(p && p.at, i);
         }),
         datasets: [
           {
