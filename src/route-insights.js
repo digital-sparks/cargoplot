@@ -704,11 +704,14 @@ Chart.register(
     });
     var trackMax = Math.ceil((Math.max.apply(null, prices) * 1.2) / 500) * 500;
 
-    /* One size for desktop, one for mobile (spec §8: < 768px). */
+    /* One size for desktop, one for mobile (spec §8: < 768px). `row` is the
+       height each carrier gets; the bar is centred in it, so the gap between
+       bars is row - bar and the space above the first / below the last is half
+       that. Raising `row` is the single lever for vertical rhythm. */
     function carrierScale() {
       return isMobile()
-        ? { font: 14, gap: 10, namePad: 8, bar: 10, row: 34 }
-        : { font: 18, gap: 16, namePad: 16, bar: 12, row: 40 };
+        ? { font: 14, gap: 10, namePad: 8, bar: 10, row: 42 }
+        : { font: 18, gap: 16, namePad: 16, bar: 12, row: 52 };
     }
 
     var ctx = mountCanvas(host);
