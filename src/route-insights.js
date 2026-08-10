@@ -64,6 +64,10 @@ Chart.register(
     inProgress: 'rgba(174, 186, 184, 0.45)',
   };
 
+  // Matches the family declared in the Webflow stylesheet — Chart.js draws to
+  // canvas, so it needs the family by name and silently falls back if it's off.
+  var FONT = "'Instrument Sans', sans-serif";
+
   var LOCALE = (document.documentElement.lang || 'en').slice(0, 2);
 
   /* ---------------------------------------------------------------- utils */
@@ -301,6 +305,31 @@ Chart.register(
     return c.getContext('2d');
   }
 
+  /* Chart.js animates on construction, so building a chart the moment the JSON
+     lands means the bars have already grown by the time the reader scrolls to
+     them. Hold construction until the container is actually on screen. Fires
+     immediately for anything already in view, and degrades to rendering
+     straight away where IntersectionObserver is unavailable. */
+  function whenVisible(el, render) {
+    if (typeof window.IntersectionObserver !== 'function') {
+      render();
+      return;
+    }
+    var io = new window.IntersectionObserver(
+      function (entries) {
+        for (var i = 0; i < entries.length; i++) {
+          if (entries[i].isIntersecting) {
+            io.disconnect();
+            render();
+            return;
+          }
+        }
+      },
+      { threshold: 0.25 }
+    );
+    io.observe(el);
+  }
+
   function destroyChart(name) {
     if (chartInstances[name]) {
       chartInstances[name].destroy();
@@ -484,14 +513,19 @@ Chart.register(
         responsive: true,
         maintainAspectRatio: false,
         layout: { padding: { top: 24 } },
+        /* No tooltip and nothing clickable here, so there is nothing for a
+           pointer to do — an empty event list switches off Chart.js's default
+           hover restyling of the bar as well. */
+        events: [],
         plugins: {
           legend: { display: false },
           tooltip: { enabled: false },
           datalabels: {
             anchor: 'end',
             align: 'end',
+            offset: 2, // sits 2px closer to the bar than the Chart.js default
             color: COLORS.dark,
-            font: { weight: '600', size: 16 },
+            font: { family: FONT, weight: '700', size: 14 },
             // Raw API values carry full precision (4.3333) — one decimal only.
             formatter: function (v) {
               return v === null ? '' : fmt(v, 'days');
@@ -501,7 +535,7 @@ Chart.register(
         scales: {
           x: {
             grid: { display: false },
-            ticks: { font: { weight: '600', size: 16 }, color: COLORS.tick },
+            ticks: { font: { family: FONT, weight: '600', size: 14 }, color: COLORS.tick },
             border: { display: false },
           },
           y: {
@@ -1013,8 +1047,12 @@ Chart.register(
 
         wirePriceWindows(route);
         var delayHost = document.querySelector('[data-route-chart="weekly-delay"]');
-        if (delayHost && route.weeklyDelayCongestion)
-          renderWeeklyDelay(delayHost, route.weeklyDelayCongestion);
+        if (delayHost && route.weeklyDelayCongestion) {
+          // Bars grow on scroll-in, not on load — see whenVisible().
+          whenVisible(delayHost, function () {
+            renderWeeklyDelay(delayHost, route.weeklyDelayCongestion);
+          });
+        }
         var trendHost = document.querySelector('[data-route-chart="transit-trend"]');
         if (trendHost && route.monthlyTransitTrend)
           renderTransitTrend(trendHost, route.monthlyTransitTrend);
