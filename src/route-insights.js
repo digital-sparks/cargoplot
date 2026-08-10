@@ -74,6 +74,11 @@ Chart.register(
      axis borders we never configure explicitly, on all four charts. */
   Chart.defaults.borderColor = COLORS.grid;
 
+  // Spec §8 breakpoints: mobile is < 768px.
+  function isMobile() {
+    return (window.innerWidth || document.documentElement.clientWidth || 0) < 768;
+  }
+
   var LOCALE = (document.documentElement.lang || 'en').slice(0, 2);
 
   /* ---------------------------------------------------------------- utils */
@@ -397,12 +402,22 @@ Chart.register(
     /* Axis label styling is shared by both line charts, so it lives here rather
        than in each opts.ticks() — those only supply what genuinely differs
        (step size, padding, value formatting). */
-    yTicks.font = { family: FONT, size: opts.yFontSize || 12, weight: '600' };
+    /* yFontSize may be a number or a function, so a chart can size its labels
+       off the viewport. Re-resolved in onResize below, which is how the mobile
+       size survives a rotation or a window drag without a full re-render. */
+    function resolveYSize() {
+      var s = opts.yFontSize || 12;
+      return typeof s === 'function' ? s() : s;
+    }
+    yTicks.font = { family: FONT, size: resolveYSize(), weight: '600' };
     yTicks.color = COLORS.dark;
 
     var options = {
       responsive: true,
       maintainAspectRatio: false,
+      onResize: function (chart) {
+        chart.options.scales.y.ticks.font.size = resolveYSize();
+      },
       plugins: {
         legend: { display: false },
         datalabels: { display: false },
@@ -465,7 +480,9 @@ Chart.register(
   function renderPriceHistory(host, series, windowMonths) {
     renderLineChart('price-history', host, series.points.slice(-windowMonths), {
       pointRadius: 6,
-      yFontSize: 20,
+      yFontSize: function () {
+        return isMobile() ? 14 : 18;
+      },
       /* No left padding: with crossAlign 'far' the price labels then start at
          the container's own left edge, so they line up with the card title
          above them rather than sitting 20px inboard of it. */
@@ -482,7 +499,8 @@ Chart.register(
       ticks: function (b) {
         return {
           stepSize: Math.max(1, Math.round((b.max - b.min) / 4)),
-          padding: 20,
+          padding: 10, // gap between the price labels and the plot area
+
           callback: function (v) {
             return fmt(v, 'money');
           },
