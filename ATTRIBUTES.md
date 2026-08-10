@@ -105,10 +105,16 @@ recommend deleting them.
 ### `data-route-trend` — trend badges
 
 Values: `transitTime` | `onTimeRate` | `marketPrice`. All three are on the
-hero KPI cards. Script writes `▲/▼ + delta` (marketPrice as %, others d/pp),
+hero KPI cards. Script writes an inline **SVG chevron** (up/down, geometry from
+the design export, `stroke="currentColor"` so `.is-up` / `.is-down` recolour it
+along with the number) followed by the delta (marketPrice as %, others d/pp),
 adds `.is-up` / `.is-down`, and hides the badge when
 `previous.sampleSize == 0`. Note: "up" is bad for transitTime/marketPrice,
 good for onTimeRate — colour via the classes per badge.
+
+⚠️ The script **rebuilds the badge's contents** on load (chevron + value). An
+icon placed inside the badge in the Designer will be discarded — style the
+injected chevron via the badge's `color` instead.
 
 ### `data-route-chart` — chart containers (script injects the canvas)
 

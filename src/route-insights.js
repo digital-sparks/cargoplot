@@ -262,6 +262,43 @@ Chart.register(
     marketPrice: { format: 'pct', suffix: '%' },
   };
 
+  /* Chevron, not the ▲/▼ triangles the first build used — the triangles were a
+     text glyph, so their weight and shape were whatever the font happened to
+     provide. Drawn as inline SVG instead: `currentColor` keeps the colour under
+     Designer control via .is-up / .is-down, and em units make it track the
+     badge's own font-size. */
+  var SVG_NS = 'http://www.w3.org/2000/svg';
+
+  /* Geometry copied verbatim from the design export. The "down" path is the
+     up path mirrored about y = 6.25 (4.6875 + 7.8125 = 12.5), which keeps the
+     apex and the two ends on exactly the same rows as the up chevron. */
+  var CHEVRON_UP = 'M9.375 7.8125L6.25 4.6875L3.125 7.8125';
+  var CHEVRON_DOWN = 'M9.375 4.6875L6.25 7.8125L3.125 4.6875';
+
+  function chevron(up) {
+    var svg = document.createElementNS(SVG_NS, 'svg');
+    svg.setAttribute('viewBox', '0 0 13 13');
+    svg.setAttribute('width', '13');
+    svg.setAttribute('height', '13');
+    svg.setAttribute('fill', 'none');
+    svg.setAttribute('aria-hidden', 'true');
+    svg.setAttribute('focusable', 'false');
+    svg.style.display = 'inline-block';
+    svg.style.verticalAlign = 'middle';
+    svg.style.marginRight = '0.25em';
+
+    var path = document.createElementNS(SVG_NS, 'path');
+    path.setAttribute('d', up ? CHEVRON_UP : CHEVRON_DOWN);
+    /* The export hard-codes #002D28; currentColor renders identically while
+       letting .is-up / .is-down recolour the chevron and the number together
+       from the Designer. Swap in COLORS.dark to pin it. */
+    path.setAttribute('stroke', 'currentColor');
+    path.setAttribute('stroke-width', '1.04167');
+    path.setAttribute('stroke-linejoin', 'round');
+    svg.appendChild(path);
+    return svg;
+  }
+
   function populateTrends(route) {
     document.querySelectorAll('[data-route-trend]').forEach(function (el) {
       var key = el.getAttribute('data-route-trend');
@@ -278,17 +315,21 @@ Chart.register(
         return;
       }
 
-      var delta, text;
+      var delta, valueText;
       if (key === 'marketPrice') {
         delta = prev === 0 ? 0 : ((cur - prev) / prev) * 100;
-        text = (delta >= 0 ? '\u25B2 ' : '\u25BC ') + Math.abs(Math.round(delta * 10) / 10) + '%';
+        valueText = Math.abs(Math.round(delta * 10) / 10) + '%';
       } else {
         delta = cur - prev;
-        text =
-          (delta >= 0 ? '\u25B2 ' : '\u25BC ') + Math.abs(Math.round(delta * 10) / 10) + cfg.suffix;
+        valueText = Math.abs(Math.round(delta * 10) / 10) + cfg.suffix;
       }
       el.style.display = '';
-      el.textContent = text;
+      /* Rebuilt as nodes rather than textContent so the chevron can be a real
+         SVG. Only the numeric value is interpolated, so there is nothing here
+         that could carry markup. */
+      el.innerHTML = '';
+      el.appendChild(chevron(delta >= 0));
+      el.appendChild(document.createTextNode(valueText));
       el.classList.toggle('is-up', delta > 0);
       el.classList.toggle('is-down', delta < 0);
     });
