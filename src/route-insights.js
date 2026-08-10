@@ -358,6 +358,10 @@ Chart.register(
   }
 
   /* ------------------------------------------------------ empty states */
+  /* The placeholders default to display:none in the Designer, so revealing one
+     has to name a display value — clearing the inline style would just fall
+     back to that none and leave it hidden. */
+  var EMPTY_DISPLAY = 'flex';
   /* Single place that decides "this chart has nothing to draw". Sets the
      documented data-empty flag on the container and swaps in the matching
      [data-route-empty="<chart name>"] placeholder, so the two can never
@@ -374,7 +378,7 @@ Chart.register(
       host.style.display = isEmpty ? 'none' : '';
     }
     var placeholder = document.querySelector('[data-route-empty="' + name + '"]');
-    if (placeholder) placeholder.style.display = isEmpty ? '' : 'none';
+    if (placeholder) placeholder.style.display = isEmpty ? EMPTY_DISPLAY : 'none';
   }
 
   function eachEmptyState(fn) {
@@ -394,7 +398,7 @@ Chart.register(
      empty, so show all placeholders rather than leaving blank boxes. */
   function showAllEmptyStates() {
     eachEmptyState(function (el) {
-      el.style.display = '';
+      el.style.display = EMPTY_DISPLAY;
       var name = el.getAttribute('data-route-empty');
       var host = name && document.querySelector('[data-route-chart="' + name + '"]');
       if (host) host.style.display = 'none';
