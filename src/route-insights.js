@@ -312,10 +312,10 @@ Chart.register(
   }
 
   /* Chart.js animates on construction, so building a chart the moment the JSON
-     lands means the bars have already grown by the time the reader scrolls to
-     them. Hold construction until the container is actually on screen. Fires
-     immediately for anything already in view, and degrades to rendering
-     straight away where IntersectionObserver is unavailable. */
+     lands means it has already animated by the time the reader scrolls to it.
+     Hold construction until the container is actually on screen. Used by all
+     four charts. Fires immediately for anything already in view, and degrades
+     to rendering straight away where IntersectionObserver is unavailable. */
   function whenVisible(el, render) {
     if (typeof window.IntersectionObserver !== 'function') {
       render();
@@ -779,16 +779,31 @@ Chart.register(
         return p.sampleSize > 0;
       });
     }
-    function select(toggle, months) {
+    /* The chips are wired and styled immediately — only the FIRST draw waits
+       for the chart to scroll into view. A click always draws straight away,
+       since by then the reader is looking at it. */
+    var drawn = false;
+    function select(toggle, months, deferFirstDraw) {
       toggles.forEach(function (t) {
         t.classList.remove('is-active');
       });
       if (toggle) toggle.classList.add('is-active');
-      renderPriceHistory(host, series, months);
+      var draw = function () {
+        drawn = true;
+        renderPriceHistory(host, series, months);
+      };
+      if (!deferFirstDraw) {
+        draw();
+        return;
+      }
+      whenVisible(host, function () {
+        // A chip clicked before the chart scrolled in wins — don't clobber it.
+        if (!drawn) draw();
+      });
     }
 
     if (!toggles.length) {
-      renderPriceHistory(host, series, 12);
+      select(null, 12, true);
       return;
     }
 
@@ -808,7 +823,7 @@ Chart.register(
         defaultMonths = months;
       }
     });
-    if (defaultToggle) select(defaultToggle, defaultMonths);
+    if (defaultToggle) select(defaultToggle, defaultMonths, true);
     else {
       host.setAttribute('data-empty', 'true');
       host.innerHTML = '';
@@ -935,6 +950,9 @@ Chart.register(
           height: Math.round(r.height),
           width: Math.round(r.width),
           position: window.getComputedStyle(el).position,
+          // Charts build on scroll-in, so one that hasn't been reached yet has
+          // no canvas. Not a fault — surfaced so QA doesn't read it as one.
+          rendered: !!el.querySelector('canvas'),
         });
       });
       var collapsed = geometry
@@ -1137,10 +1155,17 @@ Chart.register(
           });
         }
         var trendHost = document.querySelector('[data-route-chart="transit-trend"]');
-        if (trendHost && route.monthlyTransitTrend)
-          renderTransitTrend(trendHost, route.monthlyTransitTrend);
+        if (trendHost && route.monthlyTransitTrend) {
+          whenVisible(trendHost, function () {
+            renderTransitTrend(trendHost, route.monthlyTransitTrend);
+          });
+        }
         var carrierHost = document.querySelector('[data-route-chart="carrier-prices"]');
-        if (carrierHost) renderCarrierPrices(carrierHost, route.priceByCarrier);
+        if (carrierHost) {
+          whenVisible(carrierHost, function () {
+            renderCarrierPrices(carrierHost, route.priceByCarrier);
+          });
+        }
 
         setState('ready', { data: route, meta: meta, ms: Date.now() - t0 });
         document.dispatchEvent(
