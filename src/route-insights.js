@@ -68,6 +68,12 @@ Chart.register(
   // canvas, so it needs the family by name and silently falls back if it's off.
   var FONT = "'Instrument Sans', sans-serif";
 
+  /* Every rule any chart draws is neutral-100. Chart.js otherwise defaults axis
+     borders to a translucent black (rgba(0,0,0,0.1)) which reads darker than
+     the gridlines sitting right next to it. Setting the default covers the
+     axis borders we never configure explicitly, on all four charts. */
+  Chart.defaults.borderColor = COLORS.grid;
+
   var LOCALE = (document.documentElement.lang || 'en').slice(0, 2);
 
   /* ---------------------------------------------------------------- utils */
@@ -367,6 +373,11 @@ Chart.register(
        edge of the label area so $3,906 and $2,631 start at the same x. */
     var yTicks = opts.ticks(b);
     yTicks.crossAlign = 'far';
+    /* Axis label styling is shared by both line charts, so it lives here rather
+       than in each opts.ticks() — those only supply what genuinely differs
+       (step size, padding, value formatting). */
+    yTicks.font = { family: FONT, size: 12, weight: '600' };
+    yTicks.color = COLORS.dark;
 
     var options = {
       responsive: true,
@@ -385,7 +396,7 @@ Chart.register(
       scales: {
         x: {
           grid: { display: false },
-          ticks: { font: { size: 16, weight: '600' }, color: COLORS.tick },
+          ticks: { font: { family: FONT, size: 14, weight: '600' }, color: COLORS.tick },
         },
         y: {
           border: { display: false },
@@ -446,8 +457,6 @@ Chart.register(
       ticks: function (b) {
         return {
           stepSize: Math.max(1, Math.round((b.max - b.min) / 4)),
-          font: { size: 16, weight: '600' },
-          color: COLORS.tick,
           padding: 20,
           callback: function (v) {
             return fmt(v, 'money');
@@ -609,8 +618,6 @@ Chart.register(
       },
       ticks: function () {
         return {
-          font: { size: 16, weight: '600' },
-          color: COLORS.tick,
           callback: function (v) {
             return v + 'd';
           },
@@ -690,7 +697,7 @@ Chart.register(
               align: 'end',
               offset: init.offset,
               color: COLORS.tick,
-              font: { size: init.price, weight: 'bold' },
+              font: { family: FONT, size: init.price, weight: 'bold' },
               formatter: function (v, c) {
                 return fmt(prices[c.dataIndex], 'money');
               },
@@ -726,7 +733,11 @@ Chart.register(
           y: {
             grid: { display: false },
             border: { display: false },
-            ticks: { font: { size: init.name, weight: '500' }, color: COLORS.tick, padding: init.namePad },
+            ticks: {
+              font: { family: FONT, size: init.name, weight: '500' },
+              color: COLORS.tick,
+              padding: init.namePad,
+            },
           },
         },
       },
