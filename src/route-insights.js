@@ -357,6 +357,50 @@ Chart.register(
     return c.getContext('2d');
   }
 
+  /* ------------------------------------------------------ empty states */
+  /* Single place that decides "this chart has nothing to draw". Sets the
+     documented data-empty flag on the container and swaps in the matching
+     [data-route-empty="<chart name>"] placeholder, so the two can never
+     disagree. The placeholder is looked up globally rather than as a sibling,
+     so it keeps working if the Designer markup is restructured. */
+  function setChartEmpty(name, host, isEmpty) {
+    if (host) {
+      if (isEmpty) {
+        host.setAttribute('data-empty', 'true');
+        host.innerHTML = '';
+      } else {
+        host.removeAttribute('data-empty');
+      }
+      host.style.display = isEmpty ? 'none' : '';
+    }
+    var placeholder = document.querySelector('[data-route-empty="' + name + '"]');
+    if (placeholder) placeholder.style.display = isEmpty ? '' : 'none';
+  }
+
+  function eachEmptyState(fn) {
+    Array.prototype.forEach.call(document.querySelectorAll('[data-route-empty]'), fn);
+  }
+
+  /* Assume data until proven otherwise: hidden at boot so a placeholder never
+     flashes before the JSON lands. If the script never runs at all, they stay
+     in whatever state the Designer left them. */
+  function hideEmptyStates() {
+    eachEmptyState(function (el) {
+      el.style.display = 'none';
+    });
+  }
+
+  /* No JSON at all (fetch failed, or the CMS field is blank) — every chart is
+     empty, so show all placeholders rather than leaving blank boxes. */
+  function showAllEmptyStates() {
+    eachEmptyState(function (el) {
+      el.style.display = '';
+      var name = el.getAttribute('data-route-empty');
+      var host = name && document.querySelector('[data-route-chart="' + name + '"]');
+      if (host) host.style.display = 'none';
+    });
+  }
+
   /* Chart.js animates on construction, so building a chart the moment the JSON
      lands means it has already animated by the time the reader scrolls to it.
      Hold construction until the container is actually on screen. Used by all
@@ -428,11 +472,10 @@ Chart.register(
       return v !== null;
     });
     if (!present.length) {
-      host.setAttribute('data-empty', 'true');
-      host.innerHTML = '';
+      setChartEmpty(name, host, true);
       return;
     }
-    host.removeAttribute('data-empty');
+    setChartEmpty(name, host, false);
 
     // Last real datapoint: resolved once here, not re-scanned per point per frame.
     var last = values.length - 1;
@@ -608,7 +651,9 @@ Chart.register(
     var pts = series.points || [];
     if (pts.length > 8) {
       console.warn(
-        '[route-insights] weeklyDelayCongestion returned ' + pts.length + ' points; showing the last 8'
+        '[route-insights] weeklyDelayCongestion returned ' +
+          pts.length +
+          ' points; showing the last 8'
       );
       pts = pts.slice(-8);
     }
@@ -619,6 +664,14 @@ Chart.register(
     var present = values.filter(function (v) {
       return v !== null;
     });
+    /* This chart never had the data-empty branch the other three did, so a week
+       series with no samples anywhere drew an empty grid instead of reporting
+       itself empty. ATTRIBUTES.md always specified it. */
+    if (!present.length) {
+      setChartEmpty('weekly-delay', host, true);
+      return;
+    }
+    setChartEmpty('weekly-delay', host, false);
     var maxAbs = present.length ? Math.max.apply(null, present.map(Math.abs)) : 0;
     var minVal = present.length ? Math.min.apply(null, present) : 0;
     var yMax = Math.max(4, Math.ceil(Math.max(maxAbs, threshold) * 1.3));
@@ -731,11 +784,10 @@ Chart.register(
       return a.medianPrice - b.medianPrice;
     });
     if (!items.length) {
-      host.setAttribute('data-empty', 'true');
-      host.innerHTML = '';
+      setChartEmpty('carrier-prices', host, true);
       return;
     }
-    host.removeAttribute('data-empty');
+    setChartEmpty('carrier-prices', host, false);
 
     var names = items.map(function (c) {
       return c.name;
@@ -935,10 +987,7 @@ Chart.register(
       }
     });
     if (defaultToggle) select(defaultToggle, defaultMonths, true);
-    else {
-      host.setAttribute('data-empty', 'true');
-      host.innerHTML = '';
-    }
+    else setChartEmpty('price-history', host, true);
   }
 
   /* ------------------------------------------------------ diagnostics */
@@ -1235,12 +1284,17 @@ Chart.register(
 
     if (!url) {
       setState('no-url');
+      // A route page whose CMS "JSON" field is blank: better to say so than to
+      // leave four empty boxes. Non-route pages carry no placeholders, so this
+      // is a no-op there.
+      showAllEmptyStates();
       if (debug) check();
-      return; // not a route page / CMS "JSON" field empty
+      return;
     }
 
     var t0 = Date.now();
     setState('loading');
+    hideEmptyStates();
 
     fetch(url)
       .then(function (res) {
@@ -1258,18 +1312,28 @@ Chart.register(
         applyConditionals(route);
 
         wirePriceWindows(route);
+        /* A series missing from the payload entirely never reached a renderer,
+           so it could never report itself empty — mark it here instead. */
         var delayHost = document.querySelector('[data-route-chart="weekly-delay"]');
-        if (delayHost && route.weeklyDelayCongestion) {
-          // Bars grow on scroll-in, not on load — see whenVisible().
-          whenVisible(delayHost, function () {
-            renderWeeklyDelay(delayHost, route.weeklyDelayCongestion);
-          });
+        if (delayHost) {
+          if (route.weeklyDelayCongestion) {
+            // Bars grow on scroll-in, not on load — see whenVisible().
+            whenVisible(delayHost, function () {
+              renderWeeklyDelay(delayHost, route.weeklyDelayCongestion);
+            });
+          } else {
+            setChartEmpty('weekly-delay', delayHost, true);
+          }
         }
         var trendHost = document.querySelector('[data-route-chart="transit-trend"]');
-        if (trendHost && route.monthlyTransitTrend) {
-          whenVisible(trendHost, function () {
-            renderTransitTrend(trendHost, route.monthlyTransitTrend);
-          });
+        if (trendHost) {
+          if (route.monthlyTransitTrend) {
+            whenVisible(trendHost, function () {
+              renderTransitTrend(trendHost, route.monthlyTransitTrend);
+            });
+          } else {
+            setChartEmpty('transit-trend', trendHost, true);
+          }
         }
         var carrierHost = document.querySelector('[data-route-chart="carrier-prices"]');
         if (carrierHost) {
@@ -1286,6 +1350,8 @@ Chart.register(
       })
       .catch(function (err) {
         setState('error', { error: err.message, ms: Date.now() - t0 });
+        // No data at all — show the placeholders instead of four blank boxes.
+        showAllEmptyStates();
         console.error('[route-insights] failed:', err);
         if (debug) check();
       });

@@ -131,6 +131,29 @@ mockup image that must be deleted.
 
 Container gets `data-empty="true"` when a series has no data.
 
+### `data-route-empty` — "No data available" placeholders
+
+One per chart, value **identical to the `data-route-chart` value it belongs to**:
+
+```html
+<div data-route-chart="weekly-delay"  class="chart-js_..."></div>
+<div data-route-empty="weekly-delay"  class="chart-js_empty">No data available</div>
+```
+
+The script owns visibility of both — leave them visible in the Designer, they
+are hidden on load. Exactly one of the pair is ever shown:
+
+| Situation | Result |
+|---|---|
+| Series has data | chart shown, placeholder hidden |
+| Series present but every point `sampleSize: 0` | placeholder shown, chart hidden, `data-empty="true"` |
+| Series absent from the payload | placeholder shown, chart hidden, `data-empty="true"` |
+| Fetch failed, or CMS **JSON** field blank | all four placeholders shown |
+
+Copy lives in the Designer, so Webflow Localization translates it for `/nl/`.
+Looked up globally rather than as a sibling, so the markup can be restructured
+freely. A chart with no matching placeholder simply hides itself as before.
+
 ### `data-route-window` — price chart toggles (as built)
 
 Four unstyled text divs inside the price card: `3M 6M 12M 24M` with

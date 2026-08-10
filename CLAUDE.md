@@ -19,7 +19,8 @@ the page.
 ### 2. The `data-route-*` attributes are a frozen contract
 
 `data-route-field`, `data-route-format`, `data-route-trend`, `data-route-chart`,
-`data-route-window`, `data-route-show`, `data-route-json` — plus the class names
+`data-route-empty`, `data-route-window`, `data-route-show`, `data-route-json` —
+plus the class names
 `.is-active`, `.is-disabled`, `.is-up`, `.is-down` and the `data-empty` /
 `data-low-sample` output attributes.
 
