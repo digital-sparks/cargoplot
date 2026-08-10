@@ -154,6 +154,37 @@ Copy lives in the Designer, so Webflow Localization translates it for `/nl/`.
 Looked up globally rather than as a sibling, so the markup can be restructured
 freely. A chart with no matching placeholder simply hides itself as before.
 
+### `data-route-card` — related route cards (Block 15)
+
+Each related card describes a **different** route, so it carries its own JSON
+URL — bind it from the referenced item's CMS **JSON** field:
+
+```html
+<div class="routes_card" data-route-card="{{ related item: JSON }}">
+  <div data-route-field="transitTime">27</div>
+  <div data-route-field="marketPrice">3185</div>
+  <div data-route-field="onTimeRate">91.4</div>
+</div>
+```
+
+Inside a card, `data-route-field` and `data-route-format` behave exactly as on
+the main page — same keys, same resolvers, same formats. The page's own payload
+**never** writes into a card, and a card never writes outside itself.
+
+- **Lazy.** Each card fetches only once it scrolls into view. The block is at
+  the foot of the page, so for most readers these requests never happen.
+- **Independent.** A card loads even when the page's own JSON failed or its CMS
+  field is blank, and one card failing does not affect the others.
+- **Degrades to the baseline.** On a failed or missing URL the CMS-rendered
+  value is left untouched (Option B) — a stale number reads better than a dash.
+- ⚠️ Do **not** put `data-element="counter"` on a field inside a card. The
+  count-up resolves values against the page's own route; the script returns
+  null for carded fields to stop it animating to the wrong number, which means
+  such a field simply would not animate.
+
+Script sets `data-route-card-state="loading|ready|error|no-url"` on the card;
+`check()` reports the tally.
+
 ### `data-route-window` — price chart toggles (as built)
 
 Four unstyled text divs inside the price card: `3M 6M 12M 24M` with

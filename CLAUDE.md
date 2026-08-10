@@ -19,8 +19,8 @@ the page.
 ### 2. The `data-route-*` attributes are a frozen contract
 
 `data-route-field`, `data-route-format`, `data-route-trend`, `data-route-chart`,
-`data-route-empty`, `data-route-window`, `data-route-show`, `data-route-json` —
-plus the class names
+`data-route-empty`, `data-route-card`, `data-route-window`, `data-route-show`,
+`data-route-json` — plus the class names
 `.is-active`, `.is-disabled`, `.is-up`, `.is-down` and the `data-empty` /
 `data-low-sample` output attributes.
 
@@ -52,6 +52,12 @@ The URL comes exclusively from the `[data-route-json]` attribute rendered by the
 CMS-bound embed. If it's missing or not `http(s)`, the script **exits silently**
 so non-route pages are unaffected. Never add a hardcoded/derived URL fallback,
 and never resolve route identity (port names, locodes) in JS — that is CMS-only.
+
+Related route cards are the one exception to "one page, one payload": each
+`[data-route-card]` carries its own URL and fills only its own subtree. The
+page's payload must never write into a card — `populateFields()` skips anything
+inside one, and `fieldValue()` returns null for carded elements so the count-up
+in `animation.js` cannot animate them to this route's numbers.
 
 ### 5. `chartjs-plugin-datalabels` is registered per-chart, never globally
 

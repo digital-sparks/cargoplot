@@ -227,29 +227,98 @@ Chart.register(
 
   /* ------------------------------------------------------- text fields */
 
+  /* Elements inside a related-route card describe a DIFFERENT route, so they
+     must never be written from this page's payload. */
+  function inRelatedCard(el) {
+    return !!(el.closest && el.closest('[data-route-card]'));
+  }
+
+  function applyField(el, route, meta) {
+    var key = el.getAttribute('data-route-field');
+    var resolver = FIELDS[key];
+    if (!resolver) {
+      console.warn('[route-insights] unknown field:', key);
+      return;
+    }
+    var res = resolver(route, meta);
+    var format = el.getAttribute('data-route-format') || res.format;
+    var text =
+      res.format === 'text' || format === 'text' ? res.value || '\u2014' : fmt(res.value, format);
+    el.textContent = text;
+
+    // small-sample confidence caveat for on-time rates (API rule)
+    if (key === 'onTimeRate' || key === 'reliableOnTimeRate') {
+      var sv =
+        key === 'onTimeRate'
+          ? route.onTimeRate && route.onTimeRate.current
+          : route.mostReliableCarrier && route.mostReliableCarrier.onTimeRate;
+      el.toggleAttribute('data-low-sample', !!(sv && sv.sampleSize > 0 && sv.sampleSize < 5));
+    }
+  }
+
   function populateFields(route, meta) {
     document.querySelectorAll('[data-route-field]').forEach(function (el) {
-      var key = el.getAttribute('data-route-field');
-      var resolver = FIELDS[key];
-      if (!resolver) {
-        console.warn('[route-insights] unknown field:', key);
-        return;
-      }
-      var res = resolver(route, meta);
-      var format = el.getAttribute('data-route-format') || res.format;
-      var text =
-        res.format === 'text' || format === 'text' ? res.value || '\u2014' : fmt(res.value, format);
-      el.textContent = text;
-
-      // small-sample confidence caveat for on-time rates (API rule)
-      if (key === 'onTimeRate' || key === 'reliableOnTimeRate') {
-        var sv =
-          key === 'onTimeRate'
-            ? route.onTimeRate && route.onTimeRate.current
-            : route.mostReliableCarrier && route.mostReliableCarrier.onTimeRate;
-        el.toggleAttribute('data-low-sample', !!(sv && sv.sampleSize > 0 && sv.sampleSize < 5));
-      }
+      if (inRelatedCard(el)) return;
+      applyField(el, route, meta);
     });
+  }
+
+  function populateScope(scope, route, meta) {
+    scope.querySelectorAll('[data-route-field]').forEach(function (el) {
+      applyField(el, route, meta);
+    });
+  }
+
+  /* ------------------------------------------------ related route cards */
+  /* [data-route-card="<json url>"] wraps a card describing a DIFFERENT route
+     (Block 15). Each card fetches its own payload and fills the
+     [data-route-field] elements inside it, reusing the same resolvers and
+     formats as the main page.
+
+     Deliberately independent of the main route: a card loads even if this
+     page's own JSON failed, and one card failing never affects the others.
+     Fetches are deferred until the card scrolls into view — the block sits at
+     the very bottom, so for most readers these requests never happen at all.
+
+     On failure the CMS-rendered baseline is left exactly as it is (Option B),
+     because a stale number reads better than an em-dash. */
+  function loadRelatedCard(card, url) {
+    fetch(url)
+      .then(function (res) {
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        return res.json();
+      })
+      .then(function (data) {
+        var route = data.route || data;
+        var meta = {
+          publishedAt: data.generatedAt || data.createTime || data.publishedAt || null,
+        };
+        populateScope(card, route, meta);
+        card.setAttribute('data-route-card-state', 'ready');
+      })
+      .catch(function (err) {
+        card.setAttribute('data-route-card-state', 'error');
+        console.warn('[route-insights] related card failed:', url, err.message);
+      });
+  }
+
+  function hydrateRelatedCards() {
+    Array.prototype.forEach.call(
+      document.querySelectorAll('[data-route-card]'),
+      function (card) {
+        var url = card.getAttribute('data-route-card');
+        // Blank or non-http: the referenced item has no JSON field filled.
+        // Leave the CMS baseline rather than blanking the card.
+        if (!url || url.indexOf('http') !== 0) {
+          card.setAttribute('data-route-card-state', 'no-url');
+          return;
+        }
+        card.setAttribute('data-route-card-state', 'loading');
+        whenVisible(card, function () {
+          loadRelatedCard(card, url);
+        });
+      }
+    );
   }
 
   /* ------------------------------------------------------ trend badges */
@@ -1176,6 +1245,17 @@ Chart.register(
         pendingUntagged: absent(PENDING_FIELDS, fields),
         showingDash: blankFields,
       },
+      relatedCards: (function () {
+        var byState = {};
+        Array.prototype.forEach.call(
+          document.querySelectorAll('[data-route-card]'),
+          function (c) {
+            var s = c.getAttribute('data-route-card-state') || 'pending';
+            byState[s] = (byState[s] || 0) + 1;
+          }
+        );
+        return byState;
+      })(),
       trends: { tagged: trends, missing: absent(EXPECTED_TRENDS, trends) },
       charts: {
         tagged: charts,
@@ -1254,6 +1334,10 @@ Chart.register(
     var st = window.RouteInsights;
     var key = el && el.getAttribute && el.getAttribute('data-route-field');
     if (!key || !st || !st.data || !FIELDS[key]) return null;
+    /* A field inside a related card belongs to another route; resolving it
+       against this page's data would have the count-up animate to the wrong
+       number. Returning null leaves whatever that card wrote. */
+    if (inRelatedCard(el)) return null;
     var res = FIELDS[key](st.data, st.meta || {});
     return { value: res.value, format: el.getAttribute('data-route-format') || res.format };
   }
@@ -1285,6 +1369,10 @@ Chart.register(
     var url = resolveUrl();
     var debug = /[?&]route-debug\b/.test(window.location.search);
     window.RouteInsights.url = url;
+
+    /* Related cards own their own payloads, so they start regardless of whether
+       this page's JSON resolves — including when the CMS field here is blank. */
+    hydrateRelatedCards();
 
     if (!url) {
       setState('no-url');
