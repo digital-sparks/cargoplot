@@ -397,7 +397,7 @@ Chart.register(
     /* Axis label styling is shared by both line charts, so it lives here rather
        than in each opts.ticks() — those only supply what genuinely differs
        (step size, padding, value formatting). */
-    yTicks.font = { family: FONT, size: 12, weight: '600' };
+    yTicks.font = { family: FONT, size: opts.yFontSize || 12, weight: '600' };
     yTicks.color = COLORS.dark;
 
     var options = {
@@ -465,7 +465,11 @@ Chart.register(
   function renderPriceHistory(host, series, windowMonths) {
     renderLineChart('price-history', host, series.points.slice(-windowMonths), {
       pointRadius: 6,
-      layout: { padding: { left: 20, right: 20 } },
+      yFontSize: 20,
+      /* No left padding: with crossAlign 'far' the price labels then start at
+         the container's own left edge, so they line up with the card title
+         above them rather than sitting 20px inboard of it. */
+      layout: { padding: { left: 0, right: 20 } },
       bounds: function (min, max) {
         var lo = Math.floor((min * 0.85) / 100) * 100;
         var hi = Math.ceil((max * 1.1) / 100) * 100;
@@ -812,7 +816,11 @@ Chart.register(
     toggles.forEach(function (t) {
       var months = parseInt(t.getAttribute('data-route-window'), 10);
       var ok = hasData(months);
+      /* A window with no data is hidden outright. `.is-disabled` is still set:
+         it is part of the frozen Designer contract, so it stays for any styling
+         already hung off it — hiding is additive, not a replacement. */
       t.classList.toggle('is-disabled', !ok);
+      t.style.display = ok ? '' : 'none';
       if (!ok) return;
       t.addEventListener('click', function () {
         select(t, months);
