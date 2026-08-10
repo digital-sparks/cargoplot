@@ -336,7 +336,12 @@ Chart.register(
           }
         }
       },
-      { threshold: 0.25 }
+      /* threshold 0 rather than a ratio: a ratio can never be met by a
+         zero-area container (one collapsed by CSS, or inside a hidden panel),
+         which would leave that chart permanently unrendered. The negative
+         bottom margin is what makes it read as "scrolled to" rather than
+         "one pixel peeked in". */
+      { threshold: 0, rootMargin: '0px 0px -15% 0px' }
     );
     io.observe(el);
   }
@@ -699,30 +704,63 @@ Chart.register(
     });
     var trackMax = Math.ceil((Math.max.apply(null, prices) * 1.2) / 500) * 500;
 
-    /* Mobile: the desktop sizing (80px right gutter, 18px price labels, 16px
-       carrier names) does not fit a ~340px viewport — the price labels collide
-       with the track and the names truncate. Scale the chrome down with the
-       chart, and re-apply on resize so rotating the phone re-flows it. */
-    function carrierScale(width) {
-      if (width < 420) return { pad: 40, price: 12, offset: 6, name: 11, namePad: 6, bar: 10 };
-      if (width < 640) return { pad: 56, price: 14, offset: 10, name: 13, namePad: 10, bar: 12 };
-      return { pad: 80, price: 18, offset: 16, name: 16, namePad: 16, bar: 14 };
+    /* One size for desktop, one for mobile (spec §8: < 768px). */
+    function carrierScale() {
+      return isMobile()
+        ? { font: 14, gap: 10, namePad: 8, bar: 10, row: 34 }
+        : { font: 18, gap: 16, namePad: 16, bar: 12, row: 40 };
     }
 
-    function applyCarrierScale(chart, width) {
-      var s = carrierScale(width);
-      chart.options.layout.padding.right = s.pad;
-      chart.options.scales.y.ticks.font.size = s.name;
-      chart.options.scales.y.ticks.padding = s.namePad;
-      chart.data.datasets[0].barThickness = s.bar;
-      chart.data.datasets[1].barThickness = s.bar;
-      chart.data.datasets[0].datalabels.font.size = s.price;
-      chart.data.datasets[0].datalabels.offset = s.offset;
+    var ctx = mountCanvas(host);
+
+    /* Right-aligning the price column needs its true pixel width, so measure
+       the widest formatted price in the real font rather than guessing. Falls
+       back to a rough estimate where there is no measurable 2D context. */
+    function priceColumnWidth(size) {
+      var widest = 0;
+      var canMeasure = ctx && typeof ctx.measureText === 'function';
+      if (canMeasure) ctx.font = '700 ' + size + 'px ' + FONT;
+      prices.forEach(function (p) {
+        var label = fmt(p, 'money');
+        var w = canMeasure ? ctx.measureText(label).width : label.length * size * 0.62;
+        if (w > widest) widest = w;
+      });
+      return Math.ceil(widest);
     }
 
-    var init = carrierScale(host.clientWidth || 600);
+    /* The right gutter holds the price column: label width + gap off the track
+       + a small margin at the canvas edge. Labels are then drawn LEFT from the
+       track's end (align 'left', negative offset pushes them back across the
+       gutter), which lands every price on the same right edge. */
+    var EDGE = 4;
+    function carrierGeometry() {
+      var s = carrierScale();
+      var col = priceColumnWidth(s.font);
+      return { s: s, col: col, pad: col + s.gap + EDGE, labelOffset: -(col + s.gap + EDGE - EDGE) };
+    }
 
-    chartInstances['carrier-prices'] = new Chart(mountCanvas(host), {
+    function applyCarrierScale(chart) {
+      var g = carrierGeometry();
+      chart.options.layout.padding.right = g.pad;
+      chart.options.scales.y.ticks.font.size = g.s.font;
+      chart.options.scales.y.ticks.padding = g.s.namePad;
+      chart.data.datasets[0].barThickness = g.s.bar;
+      chart.data.datasets[1].barThickness = g.s.bar;
+      chart.data.datasets[0].datalabels.font.size = g.s.font;
+      chart.data.datasets[0].datalabels.offset = g.labelOffset;
+      host.style.height = items.length * g.s.row + 'px';
+    }
+
+    var geo = carrierGeometry();
+    var init = geo.s;
+
+    /* Height is data-dependent — seven carriers need more room than three — so
+       it is owned here rather than in the Designer. Sizing it to the rows also
+       removes the dead space above the first bar and below the last that a
+       taller container would spread across the categories. */
+    host.style.height = items.length * init.row + 'px';
+
+    chartInstances['carrier-prices'] = new Chart(ctx, {
       type: 'bar',
       data: {
         labels: names,
@@ -738,10 +776,10 @@ Chart.register(
             borderSkipped: false,
             datalabels: {
               anchor: 'end',
-              align: 'end',
-              offset: init.offset,
-              color: COLORS.tick,
-              font: { family: FONT, size: init.price, weight: 'bold' },
+              align: 'left', // drawn back across the gutter -> shared right edge
+              offset: geo.labelOffset,
+              color: COLORS.dark,
+              font: { family: FONT, size: init.font, weight: 'bold' },
               formatter: function (v, c) {
                 return fmt(prices[c.dataIndex], 'money');
               },
@@ -765,11 +803,11 @@ Chart.register(
         indexAxis: 'y',
         responsive: true,
         maintainAspectRatio: false,
-        layout: { padding: { right: init.pad } },
+        layout: { padding: { right: geo.pad } },
         // Chart.js calls this after it resizes but before the next draw, so
         // mutating options here lands without forcing an extra update pass.
-        onResize: function (chart, size) {
-          applyCarrierScale(chart, size.width);
+        onResize: function (chart) {
+          applyCarrierScale(chart);
         },
         plugins: { legend: { display: false }, tooltip: { enabled: false } },
         scales: {
@@ -778,7 +816,10 @@ Chart.register(
             grid: { display: false },
             border: { display: false },
             ticks: {
-              font: { family: FONT, size: init.name, weight: '500' },
+              // 'far' pushes the names to the outer edge of the label area, so
+              // they share a left edge instead of ragging against the track.
+              crossAlign: 'far',
+              font: { family: FONT, size: init.font, weight: '500' },
               color: COLORS.tick,
               padding: init.namePad,
             },
