@@ -35,10 +35,16 @@ const DATA_ATTRS = {
   originInput: 'cargo-origin',
   destinationInput: 'cargo-destination',
 
-  // Optional prefill, read off the module container. Routes pages bind these
-  // from the CMS so the lane is already filled in when the page loads.
+  /* Optional prefill, read off the module container. Routes pages bind these
+     from the CMS so the lane is already filled in when the page loads.
+     City and country are separate attributes because a Webflow attribute value
+     takes one variable; the combined form is still honoured if it is set. */
   prefillOrigin: 'cargo-prefill-origin',
+  prefillOriginCity: 'cargo-prefill-origin-city',
+  prefillOriginCountry: 'cargo-prefill-origin-country',
   prefillDestination: 'cargo-prefill-destination',
+  prefillDestinationCity: 'cargo-prefill-destination-city',
+  prefillDestinationCountry: 'cargo-prefill-destination-country',
   cargoTypeSelect: 'cargo-type',
   cargoTypeDisplay: 'cargo-type-display',
   dateInput: 'cargo-date',
@@ -414,13 +420,36 @@ class CargoFormModule {
   }
 
   /**
+   * Build one "City, Country" string. Prefers the combined attribute when it
+   * is set, otherwise joins the separate city/country ones — a Webflow
+   * attribute value only takes a single variable, so those are the practical
+   * way to bind two CMS fields. Missing halves are skipped rather than
+   * producing a dangling comma.
+   */
+  prefillPair(combinedAttr, cityAttr, countryAttr) {
+    const combined = this.prefillValue(combinedAttr);
+    if (combined) return combined;
+    return [this.prefillValue(cityAttr), this.prefillValue(countryAttr)]
+      .filter(Boolean)
+      .join(', ');
+  }
+
+  /**
    * Prefill origin/destination when the page already knows the lane (Routes
-   * pages). Values must be in the same "City, Country" form the dropdown
+   * pages). The result must match the "City, Country" form the dropdown
    * produces — that string is what gets submitted.
    */
   applyPrefill() {
-    const origin = this.prefillValue(DATA_ATTRS.prefillOrigin);
-    const destination = this.prefillValue(DATA_ATTRS.prefillDestination);
+    const origin = this.prefillPair(
+      DATA_ATTRS.prefillOrigin,
+      DATA_ATTRS.prefillOriginCity,
+      DATA_ATTRS.prefillOriginCountry
+    );
+    const destination = this.prefillPair(
+      DATA_ATTRS.prefillDestination,
+      DATA_ATTRS.prefillDestinationCity,
+      DATA_ATTRS.prefillDestinationCountry
+    );
     if (!origin && !destination) return;
 
     if (origin && this.validateOrigin && this.validateOrigin.preset) {
