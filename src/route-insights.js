@@ -87,6 +87,12 @@ Chart.register(
     return new Date(iso).toLocaleDateString(LOCALE, { month: 'short' });
   }
 
+  /* Axis labels are month-only, which repeats across a 24-month window — the
+     tooltip carries the year so two "Aug" points can be told apart. */
+  function monthYearLabel(iso) {
+    return new Date(iso).toLocaleDateString(LOCALE, { month: 'short', year: 'numeric' });
+  }
+
   function sampled(sv) {
     return sv && typeof sv.value === 'number' && sv.sampleSize > 0 ? sv.value : null;
   }
@@ -605,11 +611,29 @@ Chart.register(
       onResize: function (chart) {
         chart.options.scales.y.ticks.font.size = resolveYSize();
       },
+      /* Every point except the last has pointRadius 0, and Chart.js's default
+         interaction requires the pointer to intersect an element — which is
+         why only the final dot produced a tooltip. Matching on the x index
+         instead gives every month a readout, hovered anywhere in its column. */
+      interaction: { mode: 'index', intersect: false },
       plugins: {
         legend: { display: false },
         datalabels: { display: false },
         tooltip: {
+          displayColors: false, // no dataset colour swatch
+          backgroundColor: COLORS.dark,
+          titleColor: '#FFFFFF',
+          bodyColor: '#FFFFFF',
+          titleFont: { family: FONT, size: 13, weight: '700' },
+          bodyFont: { family: FONT, size: 14, weight: '600' },
+          padding: { top: 10, bottom: 10, left: 12, right: 12 },
+          cornerRadius: 8,
+          caretSize: 6,
           callbacks: {
+            title: function (items) {
+              var p = items.length ? pts[items[0].dataIndex] : null;
+              return p && p.at ? monthYearLabel(p.at) : '';
+            },
             label: function (c) {
               return opts.tooltip(c.parsed.y);
             },
@@ -659,6 +683,12 @@ Chart.register(
             pointRadius: function (c) {
               return c.dataIndex === last ? opts.pointRadius : 0;
             },
+            /* Show the accent dot on whichever month is being read, so the
+               tooltip is anchored to something visible rather than hovering
+               over a bare stretch of line. */
+            pointHoverRadius: opts.pointRadius,
+            pointHoverBackgroundColor: COLORS.accent,
+            pointHoverBorderColor: 'transparent',
           },
         ],
       },
@@ -974,6 +1004,12 @@ Chart.register(
             grouped: false,
             order: 2,
             borderSkipped: false,
+            /* The track is a static backdrop, not data — it should be there
+               from the first frame while only the value bars sweep in.
+               Chart.js resolves `animations` with the dataset as the first
+               scope (DatasetController._configure), and the bar controller
+               groups x/y/base/width/height under `numbers`. */
+            animations: { numbers: { duration: 0 } },
             datalabels: {
               anchor: 'end',
               align: 'left', // drawn back across the gutter -> shared right edge
