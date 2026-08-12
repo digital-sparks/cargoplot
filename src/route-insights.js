@@ -413,11 +413,28 @@ Chart.register(
 
   /* ------------------------------------------------------ conditionals */
 
-  function applyConditionals(route) {
+  /* [data-route-show] now accepts any [data-route-field] key in addition to
+     loadTypeBreakdown: put it on a card and the card hides when that field has
+     no figure for this route (sampleSize 0, or the branch missing from the
+     payload). Extending the accepted VALUES rather than adding an attribute —
+     loadTypeBreakdown keeps working untouched.
+
+     Only ever hides. A card with data is left in whatever display the Designer
+     gave it, so grid and flex layouts are unaffected. */
+  function hasFigure(key, route, meta) {
+    if (key === 'loadTypeBreakdown') return !!route.loadTypeBreakdown;
+    var resolver = FIELDS[key];
+    if (!resolver) {
+      console.warn('[route-insights] unknown data-route-show key:', key);
+      return true; // never hide on a typo — better a stale card than a missing one
+    }
+    var res = resolver(route, meta || {});
+    return res.value !== null && res.value !== undefined && res.value !== '';
+  }
+
+  function applyConditionals(route, meta) {
     document.querySelectorAll('[data-route-show]').forEach(function (el) {
-      var key = el.getAttribute('data-route-show');
-      var show = true;
-      if (key === 'loadTypeBreakdown') show = !!route.loadTypeBreakdown;
+      var show = hasFigure(el.getAttribute('data-route-show'), route, meta);
       el.style.display = show ? '' : 'none';
     });
   }
@@ -629,7 +646,11 @@ Chart.register(
             backgroundColor: COLORS.accentFill,
             fill: true,
             tension: 0,
-            spanGaps: false,
+            /* Per-chart: price-history bridges gaps so a quiet spell like
+               Chinese New Year reads as a continuous market rather than a
+               severed line. Off elsewhere, where a gap means "we have no
+               figure" and joining it would invent a trend. */
+            spanGaps: !!opts.spanGaps,
             pointBackgroundColor: function (c) {
               return c.dataIndex === last ? COLORS.accent : 'transparent';
             },
@@ -645,10 +666,11 @@ Chart.register(
   }
 
   /* Price history: 24 monthly points, windows sliced client-side.
-     sampleSize:0 => null value => gap (spanGaps:false). */
+     sampleSize:0 => null value, but the line is drawn straight through it. */
   function renderPriceHistory(host, series, windowMonths) {
     renderLineChart('price-history', host, series.points.slice(-windowMonths), {
       pointRadius: 6,
+      spanGaps: true,
       yFontSize: function () {
         return isMobile() ? 14 : 18;
       },
@@ -1408,7 +1430,7 @@ Chart.register(
 
         populateFields(route, meta);
         populateTrends(route);
-        applyConditionals(route);
+        applyConditionals(route, meta);
 
         wirePriceWindows(route);
         /* A series missing from the payload entirely never reached a renderer,

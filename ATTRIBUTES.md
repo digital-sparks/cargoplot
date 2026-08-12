@@ -137,7 +137,7 @@ mockup image that must be deleted.
 
 | Value | Series | Behaviour |
 |---|---|---|
-| price-history | historicalPrice (24 mo) | client-side window slicing; gaps for sampleSize 0 (spanGaps:false); accent dot on last datapoint |
+| price-history | historicalPrice (24 mo) | client-side window slicing; **line drawn straight through empty months** (`spanGaps: true`) so a quiet spell like Chinese New Year reads as a continuous market; accent dot on last datapoint |
 | weekly-delay | weeklyDelayCongestion | green < 2.5d threshold (`thresholdDays`, default 2.5), grey ≥; ISO week-number labels computed from each point's `at`; last 8 points only; inProgress week filled with a 45° grey hatch + dashed border (only visible once that week has `sampleSize > 0`); gaps for empty weeks; negative (early) values supported; no hover (`events: []`); bars animate on scroll-in |
 | transit-trend | monthlyTransitTrend | 12 months ending 2 months back — never label as "today" |
 | carrier-prices | priceByCarrier | horizontal track bars, JSON pre-sorted ascending, cheapest gets dark accent |
@@ -220,11 +220,27 @@ Four unstyled text divs inside the price card: `3M 6M 12M 24M` with
 (default 12M or first available) and `.is-disabled` on empty ranges.
 Designer TODO: style base + `.is-active` + `.is-disabled` combo classes.
 
-### `data-route-show` — conditional blocks (as built)
+### `data-route-show` — conditional blocks
 
 The FCL vs LCL **card wrapper** has `data-route-show="loadTypeBreakdown"`;
 the whole card hides when the JSON's `loadTypeBreakdown` is null (API rule:
 never render $0 / 0%).
+
+It also accepts **any `data-route-field` key**. Put it on a KPI card and the
+card hides when that field has no figure for this route — `sampleSize: 0`, or
+the branch missing from the payload entirely:
+
+```html
+<div class="routes_card" data-route-show="fastestCarrierName"> … </div>
+<div class="routes_card" data-route-show="departureDelay">     … </div>
+```
+
+- Only ever **hides**. A card with data keeps whatever display the Designer
+  gave it, so grid and flex layouts are unaffected.
+- One key per element. Tag the card with the figure it would look broken
+  without — usually the big number.
+- An unrecognised key logs a warning and leaves the card **visible**: a typo
+  should never silently delete a card from the page.
 
 ## Coexisting attributes — do not touch
 
