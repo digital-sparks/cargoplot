@@ -359,9 +359,10 @@ Chart.register(
     svg.setAttribute('fill', 'none');
     svg.setAttribute('aria-hidden', 'true');
     svg.setAttribute('focusable', 'false');
+    /* No margin: the badge owns the spacing between chevron and number, so the
+       script does not add an inline one that would stack on top of it. */
     svg.style.display = 'inline-block';
     svg.style.verticalAlign = 'middle';
-    svg.style.marginRight = '0.25em';
 
     var path = document.createElementNS(SVG_NS, 'path');
     path.setAttribute('d', up ? CHEVRON_UP : CHEVRON_DOWN);
