@@ -627,7 +627,7 @@ Chart.register(
           titleFont: { family: FONT, size: 13, weight: '700' },
           bodyFont: { family: FONT, size: 14, weight: '600' },
           padding: { top: 10, bottom: 10, left: 12, right: 12 },
-          cornerRadius: 8,
+          cornerRadius: 0,
           caretSize: 6,
           callbacks: {
             title: function (items) {

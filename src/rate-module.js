@@ -528,12 +528,30 @@ class CargoFormModule {
        the last Google result set, so a plain `input.value = ...` would fail on
        submit — this marks the field as chosen as well. Typing still clears that
        flag (see the input handler), so an edited value must be re-picked. */
+    /* Warm the dropdown for a prefilled field. handleFocus only opens the
+       dropdown when resultsArray already has entries — which is why a typed
+       field reopens with its options but a prefilled one showed nothing. This
+       runs the same Google lookup in the background, silently, so the first
+       click behaves identically. Failure is non-fatal: the field keeps its
+       value and the dropdown simply stays empty until the visitor types. */
+    const warmResults = async (value) => {
+      try {
+        await loadGoogleMapsAPI(); // guards internally against double-loading
+        mapsAPILoaded = true;
+        await performSearch(value, true);
+        log(`Module ${this.moduleIndex}: ${fieldName} dropdown warmed (${resultsArray.length})`);
+      } catch (error) {
+        log(`Module ${this.moduleIndex}: ${fieldName} warm-up skipped: ${error.message}`);
+      }
+    };
+
     validateInput.preset = (value) => {
       if (!value) return false;
       input.value = value;
       selectedFromDropdown = true;
       this.clearError(input);
       log(`Module ${this.moduleIndex}: ${fieldName} prefilled with "${value}"`);
+      warmResults(value);
       return true;
     };
 
@@ -561,7 +579,9 @@ class CargoFormModule {
     };
 
     // Perform search
-    const performSearch = async (value) => {
+    /* `silent` fills resultsArray without opening the dropdown — used to warm a
+       prefilled field so focusing it behaves like focusing one you typed. */
+    const performSearch = async (value, silent) => {
       if (isLoading) return;
 
       isLoading = true;
@@ -640,7 +660,7 @@ class CargoFormModule {
           template,
           resultsArray,
           input,
-          openDropdown,
+          silent ? () => {} : openDropdown,
           closeDropdown,
           dropdownId
         );
