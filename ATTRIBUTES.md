@@ -139,7 +139,7 @@ mockup image that must be deleted.
 |---|---|---|
 | price-history | historicalPrice (24 mo) | client-side window slicing; **line drawn straight through empty months** (`spanGaps: true`) so a quiet spell like Chinese New Year reads as a continuous market; accent dot on last datapoint |
 | weekly-delay | weeklyDelayCongestion | green < 2.5d threshold (`thresholdDays`, default 2.5), grey ≥; ISO week-number labels computed from each point's `at`; last 8 points only; inProgress week filled with a 45° grey hatch + dashed border (only visible once that week has `sampleSize > 0`); gaps for empty weeks; negative (early) values supported; no hover (`events: []`); bars animate on scroll-in |
-| transit-trend | monthlyTransitTrend | 12 months ending 2 months back — never label as "today" |
+| transit-trend | monthlyTransitTrend | 12 months ending 2 months back — never label as "today"; line drawn straight through empty months (`spanGaps: true`), same as price-history |
 | carrier-prices | priceByCarrier | horizontal track bars, JSON pre-sorted ascending, cheapest gets dark accent |
 
 Container gets `data-empty="true"` when a series has no data.

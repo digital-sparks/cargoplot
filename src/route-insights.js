@@ -857,6 +857,7 @@ Chart.register(
   function renderTransitTrend(host, series) {
     renderLineChart('transit-trend', host, series.points, {
       pointRadius: 5,
+      spanGaps: true,
       bounds: function (min, max) {
         return niceScale(min * 0.9, max * 1.08, 8);
       },
