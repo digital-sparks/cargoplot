@@ -34,6 +34,11 @@ const DATA_ATTRS = {
   // Input fields
   originInput: 'cargo-origin',
   destinationInput: 'cargo-destination',
+
+  // Optional prefill, read off the module container. Routes pages bind these
+  // from the CMS so the lane is already filled in when the page loads.
+  prefillOrigin: 'cargo-prefill-origin',
+  prefillDestination: 'cargo-prefill-destination',
   cargoTypeSelect: 'cargo-type',
   cargoTypeDisplay: 'cargo-type-display',
   dateInput: 'cargo-date',
@@ -390,7 +395,40 @@ class CargoFormModule {
       'destination'
     );
 
+    this.applyPrefill();
+
     log(`Module ${this.moduleIndex}: Autocomplete initialized`);
+  }
+
+  /**
+   * Read a prefill value: from the module container, or any descendant
+   * carrying the attribute, so the Designer can put it on either.
+   */
+  prefillValue(attr) {
+    const name = `data-${attr}`;
+    const own = this.module.getAttribute(name);
+    if (own && own.trim()) return own.trim();
+    const el = this.module.querySelector(`[${name}]`);
+    const value = el && el.getAttribute(name);
+    return value && value.trim() ? value.trim() : '';
+  }
+
+  /**
+   * Prefill origin/destination when the page already knows the lane (Routes
+   * pages). Values must be in the same "City, Country" form the dropdown
+   * produces — that string is what gets submitted.
+   */
+  applyPrefill() {
+    const origin = this.prefillValue(DATA_ATTRS.prefillOrigin);
+    const destination = this.prefillValue(DATA_ATTRS.prefillDestination);
+    if (!origin && !destination) return;
+
+    if (origin && this.validateOrigin && this.validateOrigin.preset) {
+      this.validateOrigin.preset(origin);
+    }
+    if (destination && this.validateDestination && this.validateDestination.preset) {
+      this.validateDestination.preset(destination);
+    }
   }
 
   /**
@@ -454,6 +492,20 @@ class CargoFormModule {
       }
 
       return isValid;
+    };
+
+    /* Drop a known "City, Country" straight into the field. validateInput()
+       only accepts a value the user picked from the dropdown or that appears in
+       the last Google result set, so a plain `input.value = ...` would fail on
+       submit — this marks the field as chosen as well. Typing still clears that
+       flag (see the input handler), so an edited value must be re-picked. */
+    validateInput.preset = (value) => {
+      if (!value) return false;
+      input.value = value;
+      selectedFromDropdown = true;
+      this.clearError(input);
+      log(`Module ${this.moduleIndex}: ${fieldName} prefilled with "${value}"`);
+      return true;
     };
 
     // Focus option by index
