@@ -23,7 +23,10 @@
 > `priceByCarrier`). **`data-route-json` now means inline JSON, not a URL.**
 >
 > Still read: `data-route-chart`, `data-route-json` (on charts),
-> `data-route-window`, `data-route-empty`, `date-age`.
+> `data-route-window`, `data-route-empty`, `date-age`. The script also builds
+> the related-routes Swiper (`.swiper-card-link_wrapper`) — only when the
+> wrapper and at least one `.swiper-card-link_slide` exist, since Webflow
+> renders neither for an empty multi-reference.
 > **No longer read:** `data-route-field`, `data-route-format`,
 > `data-route-trend`, `data-route-show`, `data-route-card` — inert; delete
 > them from the Designer when convenient. The sections below that describe them
@@ -271,7 +274,9 @@ Script sets `data-route-card-state="loading|ready|error|no-url"` on the card;
 
 Four unstyled text divs inside the price card: `3M 6M 12M 24M` with
 `data-route-window="3|6|12|24"`. Script wires clicks, sets `.is-active`
-(default 12M or first available) and `.is-disabled` on empty ranges.
+(default 12M or first available) and hides (`display:none` + `.is-disabled`)
+any window with no data in range. When the whole chart is empty — series
+missing, blank or unparseable — all four chips are hidden.
 Designer TODO: style base + `.is-active` + `.is-disabled` combo classes.
 
 ### `data-route-show` — ⚠️ not read since v1.3 (use Webflow conditional visibility)

@@ -35,6 +35,16 @@ import {
   Tooltip,
 } from 'chart.js';
 import ChartDataLabels from 'chartjs-plugin-datalabels';
+import Swiper from 'swiper';
+import {
+  Autoplay,
+  Navigation,
+  Pagination,
+  Scrollbar,
+  Keyboard,
+  Mousewheel,
+  A11y,
+} from 'swiper/modules';
 
 /* Register only what these four charts actually use. Importing 'chart.js/auto'
    instead would pull in every controller (doughnut, radar, polar, bubble, …)
@@ -164,6 +174,15 @@ Chart.register(
     }
     var placeholder = document.querySelector('[data-route-empty="' + name + '"]');
     if (placeholder) placeholder.style.display = isEmpty ? EMPTY_DISPLAY : 'none';
+
+    /* The price chart's window chips have no purpose without a chart — hide
+       them when it empties (series missing, blank, unparseable, or no window
+       with data). wirePriceWindows() manages them per window otherwise. */
+    if (name === 'price-history' && isEmpty) {
+      Array.prototype.forEach.call(document.querySelectorAll('[data-route-window]'), function (t) {
+        t.style.display = 'none';
+      });
+    }
   }
 
   function eachEmptyState(fn) {
@@ -881,6 +900,40 @@ Chart.register(
     return entries;
   }
 
+  /* ------------------------------------------------ related routes swiper */
+  /* Block 15's carousel. When the multi-reference is empty Webflow renders
+     neither the wrapper nor any slides, and Swiper does not cope with that —
+     so it is built only when both exist, and only once. Config as supplied
+     by the Designer. */
+  function initRelatedRoutesSwiper() {
+    var wrapper = document.querySelector('.swiper-card-link_wrapper');
+    if (!wrapper || wrapper.swiper) return null;
+    var slides = wrapper.querySelectorAll('.swiper-card-link_slide');
+    if (!slides.length) return null;
+
+    return new Swiper(wrapper, {
+      modules: [Autoplay, Navigation, Pagination, Scrollbar, Keyboard, Mousewheel, A11y],
+      wrapperClass: 'swiper-card-link_list',
+      slideClass: 'swiper-card-link_slide',
+      slidesPerView: 'auto',
+      speed: 400,
+      spaceBetween: 24,
+      a11y: true,
+      grabCursor: true,
+      autoplay: false,
+      keyboard: { onlyInViewport: true },
+      mousewheel: { forceToAxis: true },
+      navigation: { prevEl: '.swiper_button.is-prev', nextEl: '.swiper_button.is-next' },
+      scrollbar: { el: '.swiper_scrollbar', dragClass: 'swiper_scrollbar-drag', draggable: true },
+      breakpoints: {},
+      on: {
+        beforeInit: function () {
+          this.wrapperEl.style.columnGap = 'unset';
+        },
+      },
+    });
+  }
+
   /* ------------------------------------------------------ diagnostics */
   /* window.RouteInsights.check() — is every chart tagged, does its inline
      series parse, did it draw? Prints a summary; auto-runs on ?route-debug. */
@@ -1014,6 +1067,11 @@ Chart.register(
       charts: charts,
       windows: document.querySelectorAll('[data-route-window]').length,
       updated: updated,
+      relatedSwiper: {
+        wrapper: !!document.querySelector('.swiper-card-link_wrapper'),
+        slides: document.querySelectorAll('.swiper-card-link_slide').length,
+        initialised: window.RouteInsights.relatedSwiper,
+      },
       trendBadges: trends,
       legacy: legacy,
     };
@@ -1038,7 +1096,13 @@ Chart.register(
 
   /* Published at script-evaluation time so `RouteInsights.status` can tell
      "never loaded" (ReferenceError) from "loaded but never booted" ('idle'). */
-  window.RouteInsights = { status: 'idle', charts: {}, updated: [], check: check };
+  window.RouteInsights = {
+    status: 'idle',
+    charts: {},
+    updated: [],
+    relatedSwiper: false,
+    check: check,
+  };
 
   /* price-history schedules its own first draw (wirePriceWindows defers it
      until the container is on screen, but wires the toggles immediately). The
@@ -1068,6 +1132,7 @@ Chart.register(
     var hosts = document.querySelectorAll('[data-route-chart]');
     var debug = /[?&]route-debug\b/.test(window.location.search);
     window.RouteInsights.updated = updatedAge();
+    window.RouteInsights.relatedSwiper = !!initRelatedRoutesSwiper();
     if (!hosts.length) {
       window.RouteInsights.status = 'no-charts'; // not a route page
       if (debug) check();

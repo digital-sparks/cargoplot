@@ -335,7 +335,7 @@ window.Webflow.push(() => {
     // Set initial state to 0
     target.textContent = formatValue(0, parsed);
 
-    gsap.to(counter, {
+    const tween = {
       value: parsed.value,
       duration: 2,
       ease: 'power2.out',
@@ -343,14 +343,26 @@ window.Webflow.push(() => {
       onUpdate: function () {
         target.textContent = formatValue(counter.value, parsed);
       },
-      scrollTrigger: {
+    };
+
+    /* Anything already on screen when this runs counts up straight away.
+       ScrollTrigger is only asked to watch elements still below the fold —
+       leaning on it for the hero left the KPI cards sitting at 0 until the
+       reader's first scroll, because its initial measurement happens before
+       the page's intro animations have settled the layout. */
+    const rect = target.getBoundingClientRect();
+    const alreadyInView = rect.top < window.innerHeight && rect.bottom > 0;
+    if (!alreadyInView) {
+      tween.scrollTrigger = {
         trigger: target,
         start: 'top 80%', // Animation starts when element is 80% into viewport
         end: 'bottom 20%',
         toggleActions: 'play none none none', // Play on enter, reverse on leave
         once: true, // Only animate once
         // markers: true, // Remove in production
-      },
-    });
+      };
+    }
+
+    gsap.to(counter, tween);
   });
 });
