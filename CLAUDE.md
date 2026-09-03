@@ -46,18 +46,18 @@ dependency — if it never loads, the queue never flushes and the script never
 runs. That is true of every script in `src/` and acceptable on this site. Don't
 switch back to `DOMContentLoaded` for one file.
 
-### 4. The JSON URL has no fallback
+### 4. Charts read their series inline — there is no payload and no fallback
 
-The URL comes exclusively from the `[data-route-json]` attribute rendered by the
-CMS-bound embed. If it's missing or not `http(s)`, the script **exits silently**
-so non-route pages are unaffected. Never add a hardcoded/derived URL fallback,
-and never resolve route identity (port names, locodes) in JS — that is CMS-only.
+Since v1.3 every KPI is CMS-rendered; the script never fetches and never writes
+text. Each `[data-route-chart]` carries its own series in `data-route-json`
+(inline JSON, **not** a URL). A container whose attribute is missing, blank or
+unparseable shows its placeholder — never invent data, never derive a URL, and
+never resolve route identity in JS.
 
-Related route cards are the one exception to "one page, one payload": each
-`[data-route-card]` carries its own URL and fills only its own subtree. The
-page's payload must never write into a card — `populateFields()` skips anything
-inside one, and `fieldValue()` returns null for carded elements so the count-up
-in `animation.js` cannot animate them to this route's numbers.
+`data-route-field`, `data-route-format`, `data-route-trend`,
+`data-route-show` and `data-route-card` are **inert** — still on the frozen
+list so nothing renames them, but the script does not read them. Do not
+resurrect that code without a decision on where the values come from.
 
 ### 5. `chartjs-plugin-datalabels` is registered per-chart, never globally
 
@@ -93,18 +93,17 @@ https://<route-url>?route-debug
 ```
 
 Runs `RouteInsights.check()` on load and prints a console summary: script status,
-JSON timing, and every missing/typo'd/empty `data-route-*` tag. Same thing from
+each chart's inline series (present / parses / sampled points), and anything
+left over from the fetched-payload build. Same thing from
 the console on any route page:
 
 ```js
 RouteInsights.check()          // report object, plus a readable summary
-RouteInsights.status           // 'no-url' | 'loading' | 'ready' | 'error'
+RouteInsights.status           // 'idle' | 'no-charts' | 'ready'
+RouteInsights.charts           // per chart: 'ok' | 'missing' | 'blank' | 'invalid'
 ```
 
-`EXPECTED_FIELDS` / `PENDING_FIELDS` in `src/route-insights.js` mirror the ✅/⏳
-column of ATTRIBUTES.md's field table. Keep them in sync — a key that gets tagged
-in the Designer must move from `PENDING_FIELDS` to `EXPECTED_FIELDS` or the
-checker will keep excusing its absence.
+`check()` reports each chart's series state, whether it drew, container geometry, any stray `[data-route-json]` outside a chart (the old `#route-data` embed), and any legacy attributes still on the page.
 
 ## Build
 

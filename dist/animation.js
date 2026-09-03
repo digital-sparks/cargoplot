@@ -1,1 +1,300 @@
-(()=>{window.Webflow||(window.Webflow=[]);window.Webflow.push(()=>{gsap.matchMedia().add("(min-width: 911px)",()=>{let t=document.querySelector(".platform_component");if(t){let n={ITEM_DURATION:8e3,DROPDOWN_DURATION:.3,IMAGE_FADE_DURATION:.4,PROGRESS_EASE:"none",ANIMATION_EASE:"power2.inOut",CLICK_RESUME_DELAY:1e3,HOVER_RESUME_DELAY:100,SCROLL_START:"top 80%"},r=Array.from(t.querySelectorAll('[data-element="platform-item"]')),c=Array.from(t.querySelectorAll('[data-element="platform-progress-line"]')),m=Array.from(t.querySelectorAll('[data-element="platform-dropdown"]')),d=Array.from(t.querySelector(".platform_col-images").querySelectorAll('[data-element="platform-image"]')),e={currentIndex:0,isAutoPlaying:!1,isUserInteracting:!1,isAnimating:!1,pausedTime:0,startTime:null},s={autoPlay:null,progress:null,resume:null},a=()=>{Object.values(s).forEach(o=>{o&&clearTimeout(o)}),s.progress&&s.progress.kill()},i=()=>gsap.set(c,{scaleY:0}),p=()=>{e.startTime&&e.isAutoPlaying&&(e.pausedTime+=Date.now()-e.startTime,e.pausedTime=Math.min(e.pausedTime,n.ITEM_DURATION))},A=()=>{gsap.set(c,{scaleY:0,transformOrigin:"top center",height:"100%"}),gsap.set(m.slice(1),{height:0,opacity:0,overflow:"hidden"}),gsap.set(d.slice(1),{opacity:0}),gsap.set([d[0],m[0]],{opacity:1}),gsap.set(m[0],{height:"auto"})},g=(o,l=!0)=>{if(o===e.currentIndex||e.isAnimating)return;e.isAnimating=!0;let v=e.currentIndex;e.currentIndex=o,i(),l&&(e.pausedTime=0),gsap.timeline({onComplete:()=>{e.isAnimating=!1}}).to(m,{height:0,opacity:0,duration:n.DROPDOWN_DURATION,ease:n.ANIMATION_EASE}).to(d[v],{opacity:0,duration:n.IMAGE_FADE_DURATION,ease:n.ANIMATION_EASE},"-=0.2").to(d[o],{opacity:1,duration:n.IMAGE_FADE_DURATION,ease:n.ANIMATION_EASE},"-=0.4").to(m[o],{height:"auto",opacity:1,duration:n.DROPDOWN_DURATION+.2,ease:"power2.out"},"-=0.2")},u=()=>{if(!e.isAutoPlaying||e.isUserInteracting)return;a();let o=n.ITEM_DURATION-e.pausedTime;if(o<=0){let l=(e.currentIndex+1)%r.length;e.pausedTime=0,g(l,!0),u();return}e.startTime=Date.now(),s.progress=gsap.to(c[e.currentIndex],{scaleY:1,duration:o/1e3,ease:n.PROGRESS_EASE}),s.autoPlay=setTimeout(()=>{if(e.isAutoPlaying&&!e.isUserInteracting){let l=(e.currentIndex+1)%r.length;e.pausedTime=0,g(l,!0),u()}},o)},f=()=>{a(),p(),s.progress&&s.progress.pause()},E=(o=n.HOVER_RESUME_DELAY)=>{s.resume&&clearTimeout(s.resume),s.resume=setTimeout(()=>{e.isUserInteracting||(e.isAutoPlaying=!0,u())},o)},O=o=>l=>{l.preventDefault(),!(e.isAnimating||o===e.currentIndex)&&(e.isUserInteracting=!0,e.isAutoPlaying=!1,f(),g(o,!0),setTimeout(()=>{document.querySelector('[data-element="platform-item"]:hover')||(e.isUserInteracting=!1,e.isAutoPlaying=!0,u())},n.CLICK_RESUME_DELAY))},D=()=>{s.resume&&clearTimeout(s.resume),e.isUserInteracting=!0,f()},S=()=>{e.isUserInteracting=!1,e.isAutoPlaying||E()};A(),r.forEach((o,l)=>{o.addEventListener("click",O(l)),o.addEventListener("mouseenter",D),o.addEventListener("mouseleave",S),o.style.cursor="pointer"}),ScrollTrigger.create({trigger:t,start:n.SCROLL_START,onEnter:()=>{e.isAutoPlaying=!0,e.isUserInteracting=!1,e.pausedTime=0,u()},onLeave:()=>{e.isAutoPlaying=!1,f()},onEnterBack:()=>{e.isUserInteracting||(e.isAutoPlaying=!0,u())},onLeaveBack:()=>{e.isAutoPlaying=!1,f()}})}});let T=document.querySelectorAll("[data-element=counter]"),h=t=>{let n=t.textContent.trim(),r={value:0},c=e=>{let s=e.match(/^[^\d.-]*/),a=s?s[0]:"",i=e.slice(a.length),p=1,A="";i.endsWith("K")||i.endsWith("k")?(p=1e3,A=i.slice(-1),i=i.slice(0,-1)):(i.endsWith("M")||i.endsWith("m"))&&(p=1e6,A=i.slice(-1),i=i.slice(0,-1));let g=i.match(/[^\d.-]*$/),u=g?g[0]:"",f=i.slice(0,i.length-u.length);return{value:parseFloat(f)*p,prefix:a,suffix:u,unit:A,multiplier:p,hasDecimal:f.includes(".")}},m=(e,s)=>{let a=e;return s.unit?(a=e/s.multiplier,s.hasDecimal?a=a.toFixed(1):a=Math.round(a),a+=s.unit):a=Math.round(e),s.prefix+a+s.suffix},d=c(n);t.textContent=m(0,d),gsap.to(r,{value:d.value,duration:2,ease:"power2.out",snap:{value:1},onUpdate:function(){t.textContent=m(r.value,d)},scrollTrigger:{trigger:t,start:"top 80%",end:"bottom 20%",toggleActions:"play none none none",once:!0}})},y=!!document.querySelector("[data-route-json]"),R=t=>t.hasAttribute("data-route-field"),_=t=>{let n=window.RouteInsights,r=n&&n.fieldValue?n.fieldValue(t):null;if(!r||typeof r.value!="number"||r.format==="text"||r.format==="frequency")return;let c={value:0};t.textContent=n.format(0,r.format),gsap.to(c,{value:r.value,duration:2,ease:"power2.out",onUpdate:function(){t.textContent=n.format(c.value,r.format)},onComplete:function(){t.textContent=n.format(r.value,r.format)},scrollTrigger:{trigger:t,start:"top 80%",end:"bottom 20%",toggleActions:"play none none none",once:!0}})},I=[];if(T.forEach(t=>{y&&R(t)?I.push(t):h(t)}),I.length){let t=!1,n=r=>{t||(t=!0,I.forEach(r?_:h))};window.RouteInsights&&window.RouteInsights.status==="ready"?n(!0):(document.addEventListener("route-insights:ready",()=>n(!0),{once:!0}),setTimeout(()=>n(!1),5e3))}});})();
+(() => {
+  // bin/live-reload.js
+  new EventSource(`${"http://localhost:3000"}/esbuild`).addEventListener("change", () => location.reload());
+
+  // src/animation.js
+  window.Webflow ||= [];
+  window.Webflow.push(() => {
+    gsap.matchMedia().add("(min-width: 911px)", () => {
+      const platformComponent = document.querySelector(".platform_component");
+      if (platformComponent) {
+        const CONFIG = {
+          // Timing
+          ITEM_DURATION: 8e3,
+          // How long each item stays active (ms)
+          DROPDOWN_DURATION: 0.3,
+          // Dropdown open/close animation duration (s)
+          IMAGE_FADE_DURATION: 0.4,
+          // Image cross-fade duration (s)
+          PROGRESS_EASE: "none",
+          // Progress line easing
+          ANIMATION_EASE: "power2.inOut",
+          // General animation easing
+          // User interaction
+          CLICK_RESUME_DELAY: 1e3,
+          // Delay before resuming after click (ms)
+          HOVER_RESUME_DELAY: 100,
+          // Delay before resuming after hover (ms)
+          // ScrollTrigger
+          SCROLL_START: "top 80%"
+          // When animation starts on scroll
+        };
+        const items = Array.from(
+          platformComponent.querySelectorAll('[data-element="platform-item"]')
+        );
+        const progressLines = Array.from(
+          platformComponent.querySelectorAll('[data-element="platform-progress-line"]')
+        );
+        const dropdowns = Array.from(
+          platformComponent.querySelectorAll('[data-element="platform-dropdown"]')
+        );
+        const images = Array.from(
+          platformComponent.querySelector(".platform_col-images").querySelectorAll('[data-element="platform-image"]')
+        );
+        let state = {
+          currentIndex: 0,
+          isAutoPlaying: false,
+          isUserInteracting: false,
+          isAnimating: false,
+          pausedTime: 0,
+          startTime: null
+        };
+        let timers = {
+          autoPlay: null,
+          progress: null,
+          resume: null
+        };
+        const clearAllTimers = () => {
+          Object.values(timers).forEach((timer) => {
+            if (timer)
+              clearTimeout(timer);
+          });
+          if (timers.progress)
+            timers.progress.kill();
+        };
+        const resetProgressLines = () => gsap.set(progressLines, { scaleY: 0 });
+        const updatePausedTime = () => {
+          if (state.startTime && state.isAutoPlaying) {
+            state.pausedTime += Date.now() - state.startTime;
+            state.pausedTime = Math.min(state.pausedTime, CONFIG.ITEM_DURATION);
+          }
+        };
+        const initializeElements = () => {
+          gsap.set(progressLines, { scaleY: 0, transformOrigin: "top center", height: "100%" });
+          gsap.set(dropdowns.slice(1), { height: 0, opacity: 0, overflow: "hidden" });
+          gsap.set(images.slice(1), { opacity: 0 });
+          gsap.set([images[0], dropdowns[0]], { opacity: 1 });
+          gsap.set(dropdowns[0], { height: "auto" });
+        };
+        const switchToItem = (index, resetTimer = true) => {
+          if (index === state.currentIndex || state.isAnimating)
+            return;
+          state.isAnimating = true;
+          const previousIndex = state.currentIndex;
+          state.currentIndex = index;
+          resetProgressLines();
+          if (resetTimer)
+            state.pausedTime = 0;
+          const tl = gsap.timeline({
+            onComplete: () => {
+              state.isAnimating = false;
+            }
+          });
+          tl.to(dropdowns, {
+            height: 0,
+            opacity: 0,
+            duration: CONFIG.DROPDOWN_DURATION,
+            ease: CONFIG.ANIMATION_EASE
+          }).to(
+            images[previousIndex],
+            {
+              opacity: 0,
+              duration: CONFIG.IMAGE_FADE_DURATION,
+              ease: CONFIG.ANIMATION_EASE
+            },
+            "-=0.2"
+          ).to(
+            images[index],
+            {
+              opacity: 1,
+              duration: CONFIG.IMAGE_FADE_DURATION,
+              ease: CONFIG.ANIMATION_EASE
+            },
+            "-=0.4"
+          ).to(
+            dropdowns[index],
+            {
+              height: "auto",
+              opacity: 1,
+              duration: CONFIG.DROPDOWN_DURATION + 0.2,
+              ease: "power2.out"
+            },
+            "-=0.2"
+          );
+        };
+        const startAutoPlay = () => {
+          if (!state.isAutoPlaying || state.isUserInteracting)
+            return;
+          clearAllTimers();
+          const remainingTime = CONFIG.ITEM_DURATION - state.pausedTime;
+          if (remainingTime <= 0) {
+            const nextIndex = (state.currentIndex + 1) % items.length;
+            state.pausedTime = 0;
+            switchToItem(nextIndex, true);
+            startAutoPlay();
+            return;
+          }
+          state.startTime = Date.now();
+          timers.progress = gsap.to(progressLines[state.currentIndex], {
+            scaleY: 1,
+            duration: remainingTime / 1e3,
+            ease: CONFIG.PROGRESS_EASE
+          });
+          timers.autoPlay = setTimeout(() => {
+            if (state.isAutoPlaying && !state.isUserInteracting) {
+              const nextIndex = (state.currentIndex + 1) % items.length;
+              state.pausedTime = 0;
+              switchToItem(nextIndex, true);
+              startAutoPlay();
+            }
+          }, remainingTime);
+        };
+        const pauseAutoPlay = () => {
+          clearAllTimers();
+          updatePausedTime();
+          if (timers.progress)
+            timers.progress.pause();
+        };
+        const scheduleResume = (delay = CONFIG.HOVER_RESUME_DELAY) => {
+          if (timers.resume)
+            clearTimeout(timers.resume);
+          timers.resume = setTimeout(() => {
+            if (!state.isUserInteracting) {
+              state.isAutoPlaying = true;
+              startAutoPlay();
+            }
+          }, delay);
+        };
+        const handleClick = (index) => (e) => {
+          e.preventDefault();
+          if (state.isAnimating || index === state.currentIndex)
+            return;
+          state.isUserInteracting = true;
+          state.isAutoPlaying = false;
+          pauseAutoPlay();
+          switchToItem(index, true);
+          setTimeout(() => {
+            if (!document.querySelector('[data-element="platform-item"]:hover')) {
+              state.isUserInteracting = false;
+              state.isAutoPlaying = true;
+              startAutoPlay();
+            }
+          }, CONFIG.CLICK_RESUME_DELAY);
+        };
+        const handleMouseEnter = () => {
+          if (timers.resume)
+            clearTimeout(timers.resume);
+          state.isUserInteracting = true;
+          pauseAutoPlay();
+        };
+        const handleMouseLeave = () => {
+          state.isUserInteracting = false;
+          if (!state.isAutoPlaying)
+            scheduleResume();
+        };
+        initializeElements();
+        items.forEach((item, index) => {
+          item.addEventListener("click", handleClick(index));
+          item.addEventListener("mouseenter", handleMouseEnter);
+          item.addEventListener("mouseleave", handleMouseLeave);
+          item.style.cursor = "pointer";
+        });
+        ScrollTrigger.create({
+          trigger: platformComponent,
+          start: CONFIG.SCROLL_START,
+          onEnter: () => {
+            state.isAutoPlaying = true;
+            state.isUserInteracting = false;
+            state.pausedTime = 0;
+            startAutoPlay();
+          },
+          onLeave: () => {
+            state.isAutoPlaying = false;
+            pauseAutoPlay();
+          },
+          onEnterBack: () => {
+            if (!state.isUserInteracting) {
+              state.isAutoPlaying = true;
+              startAutoPlay();
+            }
+          },
+          onLeaveBack: () => {
+            state.isAutoPlaying = false;
+            pauseAutoPlay();
+          }
+        });
+      }
+    });
+    const targets = document.querySelectorAll("[data-element=counter]");
+    targets.forEach((target) => {
+      const originalText = target.textContent.trim();
+      const counter = { value: 0 };
+      const parseValue = (text) => {
+        const prefixMatch = text.match(/^[^\d.-]*/);
+        const prefix = prefixMatch ? prefixMatch[0] : "";
+        let remaining = text.slice(prefix.length);
+        let multiplier = 1;
+        let unit = "";
+        if (remaining.endsWith("K") || remaining.endsWith("k")) {
+          multiplier = 1e3;
+          unit = remaining.slice(-1);
+          remaining = remaining.slice(0, -1);
+        } else if (remaining.endsWith("M") || remaining.endsWith("m")) {
+          multiplier = 1e6;
+          unit = remaining.slice(-1);
+          remaining = remaining.slice(0, -1);
+        }
+        const suffixMatch = remaining.match(/[^\d.-]*$/);
+        const suffix = suffixMatch ? suffixMatch[0] : "";
+        const numericPart = remaining.slice(0, remaining.length - suffix.length);
+        const numValue = parseFloat(numericPart) * multiplier;
+        return {
+          value: numValue,
+          prefix,
+          suffix,
+          unit,
+          multiplier,
+          hasDecimal: numericPart.includes(".")
+        };
+      };
+      const formatValue = (value, format) => {
+        let displayValue = value;
+        if (format.unit) {
+          displayValue = value / format.multiplier;
+          if (format.hasDecimal) {
+            displayValue = displayValue.toFixed(1);
+          } else {
+            displayValue = Math.round(displayValue);
+          }
+          displayValue += format.unit;
+        } else {
+          displayValue = Math.round(value);
+        }
+        return format.prefix + displayValue + format.suffix;
+      };
+      const parsed = parseValue(originalText);
+      target.textContent = formatValue(0, parsed);
+      gsap.to(counter, {
+        value: parsed.value,
+        duration: 2,
+        ease: "power2.out",
+        snap: { value: 1 },
+        onUpdate: function() {
+          target.textContent = formatValue(counter.value, parsed);
+        },
+        scrollTrigger: {
+          trigger: target,
+          start: "top 80%",
+          // Animation starts when element is 80% into viewport
+          end: "bottom 20%",
+          toggleActions: "play none none none",
+          // Play on enter, reverse on leave
+          once: true
+          // Only animate once
+          // markers: true, // Remove in production
+        }
+      });
+    });
+  });
+})();
+//# sourceMappingURL=animation.js.map

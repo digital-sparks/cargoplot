@@ -1,24 +1,26 @@
 /**
- * Cargoplot Route Insights — dynamic data loader for Routes pages
- * ----------------------------------------------------------------
- * Reads the weekly per-route JSON from S3 and populates the page:
- *   - text KPIs via   [data-route-field]  (+ optional [data-route-format])
- *   - trend badges via [data-route-trend]
- *   - charts via      [data-route-chart="price-history|weekly-delay|transit-trend|carrier-prices"]
- *   - window toggles  [data-route-window="3|6|12|24"] (price chart)
- *   - conditionals    [data-route-show="loadTypeBreakdown"]
+ * Cargoplot Route Insights — chart layer for the Routes pages
+ * -------------------------------------------------------------
+ * Since v1.3 every KPI on a Routes page is rendered server-side by Webflow
+ * from CMS fields that are synced from the Cargoplot API. This script no
+ * longer fetches a payload or writes any text. Its whole job is the four
+ * charts, each of which carries its own series inline:
  *
- * JSON URL source: the [data-route-json] attribute rendered by the CMS-bound
- * HTML embed on the Routes template. No URL fallback — the CMS "JSON" field
- * must be filled on every route item.
+ *   <div data-route-chart="price-history"  data-route-json='{"points":[…]}'></div>
+ *   <div data-route-chart="weekly-delay"   data-route-json='{"points":[…]}'></div>
+ *   <div data-route-chart="transit-trend"  data-route-json='{"points":[…]}'></div>
+ *   <div data-route-chart="carrier-prices" data-route-json='{"items":[…]}'></div>
  *
- * Build: bundled with esbuild (see package.json "build"); Chart.js and the
- * datalabels plugin come from pnpm packages. Datalabels is registered
- * PER-CHART (plugins: [ChartDataLabels]) on purpose — do not register it
- * globally or it will label the line charts too.
+ * The JSON is the same sub-object the API serves for that series, bound from
+ * one CMS field per chart. A container with a missing or unparseable series
+ * shows its [data-route-empty] placeholder instead of a chart.
  *
- * Option B contract: Webflow renders CMS baseline values server-side;
- * this script refreshes them from the JSON on load. sampleSize:0 => "—".
+ * Still honoured: [data-route-window] price toggles, [data-route-empty]
+ * placeholders. No longer read: data-route-field / -trend / -show / -card —
+ * the CMS renders those. See ATTRIBUTES.md.
+ *
+ * Datalabels is registered PER CHART (plugins: [ChartDataLabels]) on purpose —
+ * do not register it globally or the line charts get labels too.
  */
 import {
   BarController,
@@ -93,10 +95,6 @@ Chart.register(
     return new Date(iso).toLocaleDateString(LOCALE, { month: 'short', year: 'numeric' });
   }
 
-  function sampled(sv) {
-    return sv && typeof sv.value === 'number' && sv.sampleSize > 0 ? sv.value : null;
-  }
-
   function fmt(value, kind) {
     if (value === null || value === undefined) return '\u2014';
     switch (kind) {
@@ -131,319 +129,6 @@ Chart.register(
       default:
         return String(value);
     }
-  }
-
-  /* ------------------------------------------------- field resolver map */
-  /* Each entry: fn(route, meta) -> { value, format } (value null => "—") */
-
-  var FIELDS = {
-    /* Route identity (names, locodes) is CMS-rendered — intentionally NOT here. */
-    activeCarriers: function (r) {
-      return { value: sampled(r.activeCarriers), format: 'count' };
-    },
-    avgWeeklySailings: function (r) {
-      return { value: sampled(r.avgWeeklySailings), format: 'count' };
-    },
-    sailingsFrequency: function (r) {
-      return { value: sampled(r.avgWeeklySailings), format: 'frequency' };
-    },
-
-    transitTime: function (r) {
-      return { value: sampled(r.transitTime && r.transitTime.current), format: 'days' };
-    },
-    onTimeRate: function (r) {
-      return { value: sampled(r.onTimeRate && r.onTimeRate.current), format: 'pct' };
-    },
-    marketPrice: function (r) {
-      return { value: sampled(r.marketPrice && r.marketPrice.current), format: 'money' };
-    },
-
-    departureDelay: function (r) {
-      return { value: sampled(r.departureDelay), format: 'signed-days' };
-    },
-    arrivalDelay: function (r) {
-      return { value: sampled(r.arrivalDelay), format: 'signed-days' };
-    },
-
-    fastestCarrierName: function (r) {
-      return { value: r.fastestCarrier && r.fastestCarrier.name, format: 'text' };
-    },
-    fastestCarrierDays: function (r) {
-      return {
-        value: sampled(r.fastestCarrier && r.fastestCarrier.avgTransitDays),
-        format: 'days',
-      };
-    },
-    fastestCarrierFrequency: function (r) {
-      return {
-        value: sampled(r.fastestCarrier && r.fastestCarrier.avgWeeklySailings),
-        format: 'frequency',
-      };
-    },
-
-    mostReliableCarrierName: function (r) {
-      return { value: r.mostReliableCarrier && r.mostReliableCarrier.name, format: 'text' };
-    },
-    reliableOnTimeRate: function (r) {
-      return {
-        value: sampled(r.mostReliableCarrier && r.mostReliableCarrier.onTimeRate),
-        format: 'pct',
-      };
-    },
-    reliableEtdVariance: function (r) {
-      return {
-        value: sampled(r.mostReliableCarrier && r.mostReliableCarrier.etdVarianceDays),
-        format: 'days',
-      };
-    },
-    reliableEtaVariance: function (r) {
-      return {
-        value: sampled(r.mostReliableCarrier && r.mostReliableCarrier.etaVarianceDays),
-        format: 'days',
-      };
-    },
-
-    fclSharePct: function (r) {
-      var b = r.loadTypeBreakdown;
-      return { value: b && sampled(b.fcl && b.fcl.sharePct), format: 'pct' };
-    },
-    fclPriceFrom: function (r) {
-      var b = r.loadTypeBreakdown;
-      return { value: b && sampled(b.fcl && b.fcl.bestPrice), format: 'money' };
-    },
-    lclSharePct: function (r) {
-      var b = r.loadTypeBreakdown;
-      return { value: b && sampled(b.lcl && b.lcl.sharePct), format: 'pct' };
-    },
-    lclPriceCbm: function (r) {
-      var b = r.loadTypeBreakdown;
-      return { value: b && sampled(b.lcl && b.lcl.bestPrice), format: 'money' };
-    },
-
-    dataAgeHours: function (r, meta) {
-      var ts = meta.publishedAt;
-      if (!ts) return { value: null, format: 'count' };
-      return {
-        value: Math.max(0, Math.round((Date.now() - new Date(ts).getTime()) / 36e5)),
-        format: 'count',
-      };
-    },
-    dataAgeDays: function (r, meta) {
-      var ts = meta.publishedAt;
-      if (!ts) return { value: null, format: 'count' };
-      return {
-        value: Math.max(0, Math.round((Date.now() - new Date(ts).getTime()) / 864e5)),
-        format: 'count',
-      };
-    },
-  };
-
-  /* ------------------------------------------------------- text fields */
-
-  /* Elements inside a related-route card describe a DIFFERENT route, so they
-     must never be written from this page's payload. */
-  function inRelatedCard(el) {
-    return !!(el.closest && el.closest('[data-route-card]'));
-  }
-
-  function applyField(el, route, meta) {
-    var key = el.getAttribute('data-route-field');
-    var resolver = FIELDS[key];
-    if (!resolver) {
-      console.warn('[route-insights] unknown field:', key);
-      return;
-    }
-    var res = resolver(route, meta);
-    var format = el.getAttribute('data-route-format') || res.format;
-    var text =
-      res.format === 'text' || format === 'text' ? res.value || '\u2014' : fmt(res.value, format);
-    el.textContent = text;
-
-    // small-sample confidence caveat for on-time rates (API rule)
-    if (key === 'onTimeRate' || key === 'reliableOnTimeRate') {
-      var sv =
-        key === 'onTimeRate'
-          ? route.onTimeRate && route.onTimeRate.current
-          : route.mostReliableCarrier && route.mostReliableCarrier.onTimeRate;
-      el.toggleAttribute('data-low-sample', !!(sv && sv.sampleSize > 0 && sv.sampleSize < 5));
-    }
-  }
-
-  function populateFields(route, meta) {
-    document.querySelectorAll('[data-route-field]').forEach(function (el) {
-      if (inRelatedCard(el)) return;
-      applyField(el, route, meta);
-    });
-  }
-
-  function populateScope(scope, route, meta) {
-    scope.querySelectorAll('[data-route-field]').forEach(function (el) {
-      applyField(el, route, meta);
-    });
-  }
-
-  /* ------------------------------------------------ related route cards */
-  /* [data-route-card="<json url>"] wraps a card describing a DIFFERENT route
-     (Block 15). Each card fetches its own payload and fills the
-     [data-route-field] elements inside it, reusing the same resolvers and
-     formats as the main page.
-
-     Deliberately independent of the main route: a card loads even if this
-     page's own JSON failed, and one card failing never affects the others.
-     Fetches are deferred until the card scrolls into view — the block sits at
-     the very bottom, so for most readers these requests never happen at all.
-
-     On failure the CMS-rendered baseline is left exactly as it is (Option B),
-     because a stale number reads better than an em-dash. */
-  function loadRelatedCard(card, url) {
-    fetch(url)
-      .then(function (res) {
-        if (!res.ok) throw new Error('HTTP ' + res.status);
-        return res.json();
-      })
-      .then(function (data) {
-        var route = data.route || data;
-        var meta = {
-          publishedAt: data.generatedAt || data.createTime || data.publishedAt || null,
-        };
-        populateScope(card, route, meta);
-        card.setAttribute('data-route-card-state', 'ready');
-      })
-      .catch(function (err) {
-        card.setAttribute('data-route-card-state', 'error');
-        console.warn('[route-insights] related card failed:', url, err.message);
-      });
-  }
-
-  function hydrateRelatedCards() {
-    Array.prototype.forEach.call(
-      document.querySelectorAll('[data-route-card]'),
-      function (card) {
-        var url = card.getAttribute('data-route-card');
-        // Blank or non-http: the referenced item has no JSON field filled.
-        // Leave the CMS baseline rather than blanking the card.
-        if (!url || url.indexOf('http') !== 0) {
-          card.setAttribute('data-route-card-state', 'no-url');
-          return;
-        }
-        card.setAttribute('data-route-card-state', 'loading');
-        whenVisible(card, function () {
-          loadRelatedCard(card, url);
-        });
-      }
-    );
-  }
-
-  /* ------------------------------------------------------ trend badges */
-  /* [data-route-trend="transitTime|onTimeRate|marketPrice"]
-     Hidden when previous.sampleSize == 0. Adds .is-up / .is-down. */
-
-  var TRENDS = {
-    transitTime: { format: 'days', suffix: 'd' },
-    onTimeRate: { format: 'pct', suffix: 'pp' },
-    marketPrice: { format: 'pct', suffix: '%' },
-  };
-
-  /* Chevron, not the ▲/▼ triangles the first build used — the triangles were a
-     text glyph, so their weight and shape were whatever the font happened to
-     provide. Drawn as inline SVG instead: `currentColor` keeps the colour under
-     Designer control via .is-up / .is-down, and em units make it track the
-     badge's own font-size. */
-  var SVG_NS = 'http://www.w3.org/2000/svg';
-
-  /* Geometry copied verbatim from the design export. The "down" path is the
-     up path mirrored about y = 6.25 (4.6875 + 7.8125 = 12.5), which keeps the
-     apex and the two ends on exactly the same rows as the up chevron. */
-  var CHEVRON_UP = 'M9.375 7.8125L6.25 4.6875L3.125 7.8125';
-  var CHEVRON_DOWN = 'M9.375 4.6875L6.25 7.8125L3.125 4.6875';
-
-  function chevron(up) {
-    var svg = document.createElementNS(SVG_NS, 'svg');
-    svg.setAttribute('viewBox', '0 0 13 13');
-    svg.setAttribute('width', '13');
-    svg.setAttribute('height', '13');
-    svg.setAttribute('fill', 'none');
-    svg.setAttribute('aria-hidden', 'true');
-    svg.setAttribute('focusable', 'false');
-    /* No margin: the badge owns the spacing between chevron and number, so the
-       script does not add an inline one that would stack on top of it. */
-    svg.style.display = 'inline-block';
-    svg.style.verticalAlign = 'middle';
-
-    var path = document.createElementNS(SVG_NS, 'path');
-    path.setAttribute('d', up ? CHEVRON_UP : CHEVRON_DOWN);
-    /* The export hard-codes #002D28; currentColor renders identically while
-       letting .is-up / .is-down recolour the chevron and the number together
-       from the Designer. Swap in COLORS.dark to pin it. */
-    path.setAttribute('stroke', 'currentColor');
-    path.setAttribute('stroke-width', '1.04167');
-    path.setAttribute('stroke-linejoin', 'round');
-    svg.appendChild(path);
-    return svg;
-  }
-
-  function populateTrends(route) {
-    document.querySelectorAll('[data-route-trend]').forEach(function (el) {
-      var key = el.getAttribute('data-route-trend');
-      var kpi = route[key];
-      var cfg = TRENDS[key];
-      if (!cfg || !kpi) {
-        el.style.display = 'none';
-        return;
-      }
-      var cur = sampled(kpi.current),
-        prev = sampled(kpi.previous);
-      if (cur === null || prev === null) {
-        el.style.display = 'none';
-        return;
-      }
-
-      var delta, valueText;
-      if (key === 'marketPrice') {
-        delta = prev === 0 ? 0 : ((cur - prev) / prev) * 100;
-        valueText = Math.abs(Math.round(delta * 10) / 10) + '%';
-      } else {
-        delta = cur - prev;
-        valueText = Math.abs(Math.round(delta * 10) / 10) + cfg.suffix;
-      }
-      el.style.display = '';
-      /* Rebuilt as nodes rather than textContent so the chevron can be a real
-         SVG. Only the numeric value is interpolated, so there is nothing here
-         that could carry markup. */
-      el.innerHTML = '';
-      el.appendChild(chevron(delta >= 0));
-      el.appendChild(document.createTextNode(valueText));
-      el.classList.toggle('is-up', delta > 0);
-      el.classList.toggle('is-down', delta < 0);
-    });
-  }
-
-  /* ------------------------------------------------------ conditionals */
-
-  /* [data-route-show] now accepts any [data-route-field] key in addition to
-     loadTypeBreakdown: put it on a card and the card hides when that field has
-     no figure for this route (sampleSize 0, or the branch missing from the
-     payload). Extending the accepted VALUES rather than adding an attribute —
-     loadTypeBreakdown keeps working untouched.
-
-     Only ever hides. A card with data is left in whatever display the Designer
-     gave it, so grid and flex layouts are unaffected. */
-  function hasFigure(key, route, meta) {
-    if (key === 'loadTypeBreakdown') return !!route.loadTypeBreakdown;
-    var resolver = FIELDS[key];
-    if (!resolver) {
-      console.warn('[route-insights] unknown data-route-show key:', key);
-      return true; // never hide on a typo — better a stale card than a missing one
-    }
-    var res = resolver(route, meta || {});
-    return res.value !== null && res.value !== undefined && res.value !== '';
-  }
-
-  function applyConditionals(route, meta) {
-    document.querySelectorAll('[data-route-show]').forEach(function (el) {
-      var show = hasFigure(el.getAttribute('data-route-show'), route, meta);
-      el.style.display = show ? '' : 'none';
-    });
   }
 
   /* ------------------------------------------------------------ charts */
@@ -491,17 +176,6 @@ Chart.register(
   function hideEmptyStates() {
     eachEmptyState(function (el) {
       el.style.display = 'none';
-    });
-  }
-
-  /* No JSON at all (fetch failed, or the CMS field is blank) — every chart is
-     empty, so show all placeholders rather than leaving blank boxes. */
-  function showAllEmptyStates() {
-    eachEmptyState(function (el) {
-      el.style.display = EMPTY_DISPLAY;
-      var name = el.getAttribute('data-route-empty');
-      var host = name && document.querySelector('[data-route-chart="' + name + '"]');
-      if (host) host.style.display = 'none';
     });
   }
 
@@ -1067,10 +741,7 @@ Chart.register(
 
   /* -------------------------------------------------- window toggles */
 
-  function wirePriceWindows(route) {
-    var host = document.querySelector('[data-route-chart="price-history"]');
-    if (!host) return;
-    var series = route.historicalPrice;
+  function wirePriceWindows(host, series) {
     var toggles = Array.prototype.slice.call(document.querySelectorAll('[data-route-window]'));
 
     function hasData(months) {
@@ -1131,236 +802,126 @@ Chart.register(
   }
 
   /* ------------------------------------------------------ diagnostics */
-  /* window.RouteInsights.check() — answers "did it load, is everything
-     tagged, did the JSON arrive?" in one call. Returns a report object and
-     prints a readable summary. Auto-runs when the URL carries ?route-debug,
-     so this can be checked on a live Webflow page without the console. */
+  /* window.RouteInsights.check() — is every chart tagged, does its inline
+     series parse, did it draw? Prints a summary; auto-runs on ?route-debug. */
 
-  /* What ATTRIBUTES.md says the template should carry. That file is the source
-     of truth — this is only what the checker asserts against, so move a key
-     from PENDING_FIELDS to EXPECTED_FIELDS as the Designer work lands. */
-  var EXPECTED_FIELDS = [
-    'activeCarriers',
-    'avgWeeklySailings',
-    'sailingsFrequency',
-    'transitTime',
-    'onTimeRate',
-    'marketPrice',
-    'departureDelay',
-    'arrivalDelay',
-    'fastestCarrierName',
-    'fastestCarrierDays',
-    'mostReliableCarrierName',
-    'reliableOnTimeRate',
-    'reliableEtdVariance',
-    'reliableEtaVariance',
-  ];
-  var PENDING_FIELDS = ['fclSharePct', 'fclPriceFrom', 'lclSharePct', 'lclPriceCbm'];
-  var EXPECTED_TRENDS = ['transitTime', 'onTimeRate', 'marketPrice'];
   var EXPECTED_CHARTS = ['price-history', 'weekly-delay', 'transit-trend', 'carrier-prices'];
 
-  function tagValues(attr) {
-    return Array.prototype.map.call(document.querySelectorAll('[' + attr + ']'), function (el) {
-      return el.getAttribute(attr);
-    });
+  /* Attributes the CMS-driven build no longer reads. Left over in the
+     Designer they do nothing, but they mislead the next person, so name them. */
+  var LEGACY_ATTRS = ['data-route-field', 'data-route-show', 'data-route-card'];
+
+  function readSeries(host) {
+    var raw = host.getAttribute('data-route-json');
+    if (raw === null) return { state: 'missing', series: null };
+    if (!raw.trim()) return { state: 'blank', series: null };
+    try {
+      return { state: 'ok', series: JSON.parse(raw) };
+    } catch (e) {
+      return { state: 'invalid', series: null, error: e.message };
+    }
   }
 
-  function absent(expected, found) {
-    return expected.filter(function (k) {
-      return found.indexOf(k) === -1;
-    });
+  function sampledCount(series) {
+    if (!series) return 0;
+    var list = series.points || series.items || [];
+    return list.filter(function (p) {
+      return p && p.sampleSize > 0;
+    }).length;
   }
 
   function check() {
-    var state = window.RouteInsights || {};
-    var fields = tagValues('data-route-field');
-    var trends = tagValues('data-route-trend');
-    var charts = tagValues('data-route-chart');
-    var windows = tagValues('data-route-window');
     var problems = [];
+    var charts = {};
+    var canMeasure = typeof window.getComputedStyle === 'function';
 
-    // The hero carries one of dataAgeHours / dataAgeDays, not both.
-    var hasDataAge = fields.indexOf('dataAgeHours') !== -1 || fields.indexOf('dataAgeDays') !== -1;
-    var missingFields = absent(EXPECTED_FIELDS, fields);
-    var unknownFields = fields.filter(function (k) {
-      return !FIELDS[k];
-    });
-    var pendingFound = PENDING_FIELDS.filter(function (k) {
-      return fields.indexOf(k) !== -1;
-    });
+    EXPECTED_CHARTS.forEach(function (name) {
+      var host = document.querySelector('[data-route-chart="' + name + '"]');
+      var placeholder = document.querySelector('[data-route-empty="' + name + '"]');
+      if (!host) {
+        problems.push('missing chart container: ' + name);
+        charts[name] = { container: false };
+        return;
+      }
+      var read = readSeries(host);
+      var entry = {
+        container: true,
+        series: read.state,
+        points: read.series ? (read.series.points || read.series.items || []).length : 0,
+        sampled: sampledCount(read.series),
+        placeholder: !!placeholder,
+        rendered: !!host.querySelector('canvas'),
+        empty: host.getAttribute('data-empty') === 'true',
+      };
+      if (canMeasure && typeof host.getBoundingClientRect === 'function') {
+        var r = host.getBoundingClientRect();
+        entry.height = Math.round(r.height);
+        entry.position = window.getComputedStyle(host).position;
+      }
+      charts[name] = entry;
 
-    // Tagged but showing the em-dash => resolver ran and the JSON had no sample.
-    var blankFields = Array.prototype.filter
-      .call(document.querySelectorAll('[data-route-field]'), function (el) {
-        return el.textContent === '—';
-      })
-      .map(function (el) {
-        return el.getAttribute('data-route-field');
-      });
-
-    var emptyCharts = EXPECTED_CHARTS.filter(function (n) {
-      var el = document.querySelector('[data-route-chart="' + n + '"]');
-      return !!el && el.getAttribute('data-empty') === 'true';
-    });
-
-    if (state.status === 'idle') {
-      problems.push(
-        'script loaded but never booted — window.Webflow never flushed its queue (is webflow.js on the page?)'
-      );
-    } else if (state.status === 'no-url') {
-      problems.push(
-        'no [data-route-json] URL on the page — the CMS "JSON" field is empty for this route'
-      );
-    } else if (state.status === 'error') {
-      problems.push('JSON failed to load from ' + state.url + ' — ' + state.error);
-    } else if (state.status !== 'ready') {
-      problems.push('script has not finished loading (status: ' + state.status + ')');
-    }
-    if (!fields.length && !charts.length)
-      problems.push(
-        'no data-route-* attributes found at all — wrong page, or the Designer tags are missing'
-      );
-    if (missingFields.length) problems.push('untagged fields: ' + missingFields.join(', '));
-    if (!hasDataAge) problems.push('untagged field: dataAgeHours or dataAgeDays');
-    if (unknownFields.length)
-      problems.push('unknown data-route-field values (typo?): ' + unknownFields.join(', '));
-    if (absent(EXPECTED_TRENDS, trends).length)
-      problems.push('untagged trends: ' + absent(EXPECTED_TRENDS, trends).join(', '));
-    if (absent(EXPECTED_CHARTS, charts).length)
-      problems.push('missing chart containers: ' + absent(EXPECTED_CHARTS, charts).join(', '));
-    if (!windows.length)
-      problems.push('no [data-route-window] toggles — price chart defaults to 12M');
-    if (emptyCharts.length)
-      problems.push('charts with no data in this JSON: ' + emptyCharts.join(', '));
-
-    /* Geometry. With maintainAspectRatio:false, Chart.js needs the container to
-       own its height and to be position:relative; otherwise the canvas falls
-       back to its 300x150 default and the chart renders collapsed inside a
-       full-size card. The tag checks above cannot see that — they were all
-       green while every chart on the page was squashed to 150px. Browser-only:
-       skipped where there is no layout engine. */
-    var geometry = [];
-    if (typeof window.getComputedStyle === 'function') {
-      EXPECTED_CHARTS.forEach(function (n) {
-        var el = document.querySelector('[data-route-chart="' + n + '"]');
-        if (!el || typeof el.getBoundingClientRect !== 'function') return;
-        var r = el.getBoundingClientRect();
-        geometry.push({
-          name: n,
-          height: Math.round(r.height),
-          width: Math.round(r.width),
-          position: window.getComputedStyle(el).position,
-          // Charts build on scroll-in, so one that hasn't been reached yet has
-          // no canvas. Not a fault — surfaced so QA doesn't read it as one.
-          rendered: !!el.querySelector('canvas'),
-        });
-      });
-      var collapsed = geometry
-        .filter(function (g) {
-          return g.height <= 150;
-        })
-        .map(function (g) {
-          return g.name;
-        });
-      var isStatic = geometry
-        .filter(function (g) {
-          return g.position === 'static';
-        })
-        .map(function (g) {
-          return g.name;
-        });
-      if (collapsed.length)
+      if (read.state === 'missing')
+        problems.push(name + ': no data-route-json attribute on the container');
+      else if (read.state === 'blank')
+        problems.push(name + ': data-route-json is blank — the CMS field is empty for this route');
+      else if (read.state === 'invalid')
+        problems.push(name + ': data-route-json does not parse (' + read.error + ')');
+      else if (!entry.sampled)
+        problems.push(name + ': series has no sampled points — placeholder shown');
+      if (!placeholder) problems.push(name + ': no [data-route-empty] placeholder');
+      if (entry.height !== undefined && !entry.empty && entry.height <= 150)
         problems.push(
-          'chart containers collapsed to the 150px canvas default — give them a fixed height in the Designer: ' +
-            collapsed.join(', ')
+          name + ': container collapsed to the 150px canvas default — give it a fixed height'
         );
-      if (isStatic.length)
-        problems.push(
-          'chart containers are position:static — Chart.js needs position:relative to size and resize correctly: ' +
-            isStatic.join(', ')
-        );
-    }
+      if (entry.position === 'static' && !entry.empty)
+        problems.push(name + ': container is position:static — Chart.js needs position:relative');
+    });
 
-    /* The payload names the route it describes (origin/destination locodes).
-       The script cannot verify that against the page automatically — route
-       identity is CMS-only and no locode attributes exist here — so surface it
-       for a human to eyeball. A JSON URL pasted onto the wrong CMS item is
-       otherwise invisible: the page renders confidently wrong numbers. */
-    var payload = state.data;
-    var routeId =
-      payload && payload.origin && payload.destination
-        ? (payload.origin.locode || '?') + ' → ' + (payload.destination.locode || '?')
-        : null;
+    /* [data-route-json] anywhere but a chart container is a leftover of the
+       fetched-payload build (the old #route-data embed). Ignored, but it
+       confuses anyone reading the Designer, so call it out. */
+    var stray = Array.prototype.filter.call(
+      document.querySelectorAll('[data-route-json]'),
+      function (el) {
+        return !el.hasAttribute('data-route-chart');
+      }
+    );
+    if (stray.length)
+      problems.push(
+        stray.length +
+          ' [data-route-json] element(s) outside a chart container (old #route-data embed?) — safe to delete'
+      );
+
+    var legacy = {};
+    LEGACY_ATTRS.forEach(function (a) {
+      var n = document.querySelectorAll('[' + a + ']').length;
+      if (n) legacy[a] = n;
+    });
+    if (Object.keys(legacy).length)
+      problems.push(
+        'legacy attributes present but no longer read by this script: ' +
+          Object.keys(legacy)
+            .map(function (k) {
+              return k + ' ×' + legacy[k];
+            })
+            .join(', ')
+      );
+
+    var trends = document.querySelectorAll('[data-route-trend]').length;
 
     var report = {
       ok: problems.length === 0,
       problems: problems,
-      status: state.status,
-      json: {
-        url: state.url || null,
-        route: routeId,
-        httpStatus: state.httpStatus,
-        ms: state.ms,
-        publishedAt: state.meta && state.meta.publishedAt,
-      },
-      fields: {
-        tagged: fields.length,
-        expected: EXPECTED_FIELDS.length + 1, // + dataAge
-        missing: missingFields.concat(hasDataAge ? [] : ['dataAgeHours|dataAgeDays']),
-        unknown: unknownFields,
-        pendingTagged: pendingFound,
-        pendingUntagged: absent(PENDING_FIELDS, fields),
-        showingDash: blankFields,
-      },
-      relatedCards: (function () {
-        var byState = {};
-        Array.prototype.forEach.call(
-          document.querySelectorAll('[data-route-card]'),
-          function (c) {
-            var s = c.getAttribute('data-route-card-state') || 'pending';
-            byState[s] = (byState[s] || 0) + 1;
-          }
-        );
-        return byState;
-      })(),
-      trends: { tagged: trends, missing: absent(EXPECTED_TRENDS, trends) },
-      charts: {
-        tagged: charts,
-        missing: absent(EXPECTED_CHARTS, charts),
-        empty: emptyCharts,
-        geometry: geometry,
-      },
-      windows: {
-        tagged: windows,
-        active: (
-          document.querySelector('[data-route-window].is-active') || {
-            getAttribute: function () {
-              return null;
-            },
-          }
-        ).getAttribute('data-route-window'),
-        disabled: Array.prototype.map.call(
-          document.querySelectorAll('[data-route-window].is-disabled'),
-          function (el) {
-            return el.getAttribute('data-route-window');
-          }
-        ),
-      },
+      status: window.RouteInsights.status,
+      charts: charts,
+      windows: document.querySelectorAll('[data-route-window]').length,
+      trendBadges: trends,
+      legacy: legacy,
     };
 
     var head = report.ok
-      ? '✅ route-insights OK — ' +
-        (routeId ? routeId + ', ' : '') +
-        report.fields.tagged +
-        ' fields, ' +
-        report.charts.tagged.length +
-        ' charts, JSON ' +
-        (state.ms != null ? state.ms + 'ms' : 'n/a')
-      : '⚠️ route-insights: ' +
-        problems.length +
-        ' issue(s)' +
-        (routeId ? ' — JSON is ' + routeId : '');
-
+      ? '✅ route-insights OK — ' + EXPECTED_CHARTS.length + ' charts from inline JSON'
+      : '⚠️ route-insights: ' + problems.length + ' issue(s)';
     if (console.groupCollapsed) {
       console.groupCollapsed(head);
       problems.forEach(function (p) {
@@ -1376,152 +937,78 @@ Chart.register(
 
   /* ------------------------------------------------------------- boot */
 
-  function resolveUrl() {
-    var el = document.querySelector('[data-route-json]');
-    var url = el && el.getAttribute('data-route-json');
-    console.log(url);
-    return url && url.indexOf('http') === 0 ? url : null;
-  }
+  /* Published at script-evaluation time so `RouteInsights.status` can tell
+     "never loaded" (ReferenceError) from "loaded but never booted" ('idle'). */
+  window.RouteInsights = { status: 'idle', charts: {}, check: check };
 
-  function setState(status, extra) {
-    var ri = window.RouteInsights;
-    ri.status = status;
-    if (extra) for (var k in extra) ri[k] = extra[k];
-    // Mirror onto <html> so state is visible in the element inspector. Only on
-    // route pages — never tag a page that has no [data-route-json].
-    if (ri.url) document.documentElement.setAttribute('data-route-insights', status);
-  }
-
-  /* Resolve a tagged element to its RAW number plus format. Exposed so the
-     count-up in animation.js can animate the number and hand formatting back
-     here — that file's own formatValue() rounds to integers and emits no
-     thousands separator, so letting it format these values would render 44.8
-     as "45" and $4,500 as "$4500" (and parseFloat("4,500") is 4). */
-  function fieldValue(el) {
-    var st = window.RouteInsights;
-    var key = el && el.getAttribute && el.getAttribute('data-route-field');
-    if (!key || !st || !st.data || !FIELDS[key]) return null;
-    /* A field inside a related card belongs to another route; resolving it
-       against this page's data would have the count-up animate to the wrong
-       number. Returning null leaves whatever that card wrote. */
-    if (inRelatedCard(el)) return null;
-    var res = FIELDS[key](st.data, st.meta || {});
-    return { value: res.value, format: el.getAttribute('data-route-format') || res.format };
-  }
-
-  /* Published at script-evaluation time — NOT inside boot() — so the console can
-     tell apart three failures that otherwise look identical:
-       ReferenceError                the bundle never loaded (bad CDN URL, or no
-                                     <script> tag on the page)
-       status 'idle'                 bundle loaded, but Webflow's queue never
-                                     flushed, so boot() never ran
-       status 'no-url'               booted fine, but the CMS "JSON" field is empty
-     NOTE: `window.RouteInsights` existing therefore does not imply the data
-     loaded; test `RouteInsights.status === 'ready'` instead. */
-  window.RouteInsights = {
-    status: 'idle',
-    url: null,
-    data: null,
-    meta: null,
-    error: null,
-    format: fmt,
-    fieldValue: fieldValue,
-    httpStatus: null,
-    ms: null,
-    check: check,
+  /* price-history schedules its own first draw (wirePriceWindows defers it
+     until the container is on screen, but wires the toggles immediately). The
+     other three are deferred here. */
+  var RENDERERS = {
+    'price-history': function (host, series) {
+      wirePriceWindows(host, series);
+    },
+    'weekly-delay': function (host, series) {
+      whenVisible(host, function () {
+        renderWeeklyDelay(host, series);
+      });
+    },
+    'transit-trend': function (host, series) {
+      whenVisible(host, function () {
+        renderTransitTrend(host, series);
+      });
+    },
+    'carrier-prices': function (host, series) {
+      whenVisible(host, function () {
+        renderCarrierPrices(host, series);
+      });
+    },
   };
 
   function boot() {
-    console.log('boot');
-    var url = resolveUrl();
+    var hosts = document.querySelectorAll('[data-route-chart]');
     var debug = /[?&]route-debug\b/.test(window.location.search);
-    window.RouteInsights.url = url;
-
-    /* Related cards own their own payloads, so they start regardless of whether
-       this page's JSON resolves — including when the CMS field here is blank. */
-    hydrateRelatedCards();
-
-    if (!url) {
-      setState('no-url');
-      // A route page whose CMS "JSON" field is blank: better to say so than to
-      // leave four empty boxes. Non-route pages carry no placeholders, so this
-      // is a no-op there.
-      showAllEmptyStates();
+    if (!hosts.length) {
+      window.RouteInsights.status = 'no-charts'; // not a route page
       if (debug) check();
       return;
     }
 
-    var t0 = Date.now();
-    setState('loading');
     hideEmptyStates();
 
-    fetch(url)
-      .then(function (res) {
-        window.RouteInsights.httpStatus = res.status;
-        if (!res.ok) throw new Error('HTTP ' + res.status);
-        return res.json();
-      })
-      .then(function (data) {
-        // Support both envelopes: per-route file ({route:{...}} or bare RouteInsight)
-        var route = data.route || data;
-        var meta = { publishedAt: data.generatedAt || data.createTime || data.publishedAt || null };
+    Array.prototype.forEach.call(hosts, function (host) {
+      var name = host.getAttribute('data-route-chart');
+      var render = RENDERERS[name];
+      if (!render) {
+        console.warn('[route-insights] unknown chart:', name);
+        window.RouteInsights.charts[name] = 'unknown';
+        return;
+      }
+      var read = readSeries(host);
+      window.RouteInsights.charts[name] = read.state;
+      if (read.state !== 'ok') {
+        if (read.state === 'invalid')
+          console.warn(
+            '[route-insights] ' + name + ': data-route-json does not parse —',
+            read.error
+          );
+        setChartEmpty(name, host, true);
+        return;
+      }
+      render(host, read.series);
+    });
 
-        populateFields(route, meta);
-        populateTrends(route);
-        applyConditionals(route, meta);
-
-        wirePriceWindows(route);
-        /* A series missing from the payload entirely never reached a renderer,
-           so it could never report itself empty — mark it here instead. */
-        var delayHost = document.querySelector('[data-route-chart="weekly-delay"]');
-        if (delayHost) {
-          if (route.weeklyDelayCongestion) {
-            // Bars grow on scroll-in, not on load — see whenVisible().
-            whenVisible(delayHost, function () {
-              renderWeeklyDelay(delayHost, route.weeklyDelayCongestion);
-            });
-          } else {
-            setChartEmpty('weekly-delay', delayHost, true);
-          }
-        }
-        var trendHost = document.querySelector('[data-route-chart="transit-trend"]');
-        if (trendHost) {
-          if (route.monthlyTransitTrend) {
-            whenVisible(trendHost, function () {
-              renderTransitTrend(trendHost, route.monthlyTransitTrend);
-            });
-          } else {
-            setChartEmpty('transit-trend', trendHost, true);
-          }
-        }
-        var carrierHost = document.querySelector('[data-route-chart="carrier-prices"]');
-        if (carrierHost) {
-          whenVisible(carrierHost, function () {
-            renderCarrierPrices(carrierHost, route.priceByCarrier);
-          });
-        }
-
-        setState('ready', { data: route, meta: meta, ms: Date.now() - t0 });
-        document.dispatchEvent(
-          new CustomEvent('route-insights:ready', { detail: window.RouteInsights })
-        );
-        if (debug) check();
-      })
-      .catch(function (err) {
-        setState('error', { error: err.message, ms: Date.now() - t0 });
-        // No data at all — show the placeholders instead of four blank boxes.
-        showAllEmptyStates();
-        console.error('[route-insights] failed:', err);
-        if (debug) check();
-      });
+    window.RouteInsights.status = 'ready';
+    document.documentElement.setAttribute('data-route-insights', 'ready');
+    document.dispatchEvent(
+      new CustomEvent('route-insights:ready', { detail: window.RouteInsights })
+    );
+    if (debug) check();
   }
 
-  /* Boot on Webflow's ready queue — the house pattern used by global.js,
-     animation.js, exit-intent.js, service.js, solution.js and rate-module.js.
-     It fires after webflow.js has initialised IX2 and the count-up widgets, so
-     the page is fully settled before we touch it. Note this makes webflow.js a
-     hard dependency: if it never loads, the queue never flushes and boot never
-     runs. That holds for every script in src/ and for every page on this site. */
+  /* Boot on Webflow's ready queue — the house pattern shared by the other
+     scripts in src/. It fires after webflow.js has initialised, and makes
+     webflow.js a hard dependency, which holds for every page on this site. */
   window.Webflow ||= [];
   window.Webflow.push(boot);
 })();
