@@ -267,6 +267,18 @@ window.Webflow.push(() => {
   const targets = document.querySelectorAll('[data-element=counter]');
 
   targets.forEach((target) => {
+    /* A timestamp element ([date-age] and friends) is not a number to count
+       up — route-insights.js writes "4 days" into it. Skip it here so the
+       result no longer depends on which of the two async bundles Webflow's
+       queue happens to run first. */
+    if (
+      target.hasAttribute('date-age') ||
+      target.hasAttribute('data-date-age') ||
+      target.hasAttribute('data-age')
+    ) {
+      return;
+    }
+
     const originalText = target.textContent.trim();
     const counter = { value: 0 };
 
