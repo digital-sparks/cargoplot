@@ -864,17 +864,17 @@ Chart.register(
     return { value: Math.floor(day / 365.25), unit: 'year' };
   }
 
+  /* Abbreviated, no space — "4d", "23h" — matching the "27d" style used for
+     every other duration on the page. Intl's narrow unit style is not used
+     because it renders both month and minute as "m". */
+  var AGE_UNITS = {
+    en: { minute: 'min', hour: 'h', day: 'd', week: 'w', month: 'mo', year: 'y' },
+    nl: { minute: 'min', hour: 'u', day: 'd', week: 'w', month: 'mnd', year: 'jr' },
+  };
+
   function formatAge(parts) {
-    try {
-      return new Intl.NumberFormat(LOCALE, {
-        style: 'unit',
-        unit: parts.unit,
-        unitDisplay: 'long',
-      }).format(parts.value);
-    } catch (e) {
-      // Very old engines without unit formatting: plain English.
-      return parts.value + ' ' + parts.unit + (parts.value === 1 ? '' : 's');
-    }
+    var units = AGE_UNITS[LOCALE] || AGE_UNITS.en;
+    return parts.value + units[parts.unit];
   }
 
   function updatedAge() {

@@ -172,9 +172,9 @@ injected chevron via the badge's `color` instead.
 ```
 
 The attribute holds the sync timestamp; the script replaces the element's text
-with how long ago that was, floored to the largest whole unit — `23 hours`,
-`1 day`, `4 days`, `2 weeks`, `1 month`, `1 year` — localised through
-Intl, so the NL page reads `4 dagen`. Keep the trailing copy ("ago" /
+with how long ago that was, floored to the largest whole unit and abbreviated
+with no space, matching the `27d` style used elsewhere: `23h`, `1d`, `4d`,
+`2w`, `1mo`, `1y` — on the NL page `23u`, `4d`, `2w`, `1mnd`, `1jr`. Keep the trailing copy ("ago" /
 "geleden") in a **sibling** element, as with every other unit on the page.
 `data-date-age` and `data-age` are accepted as well.
 

@@ -42,8 +42,8 @@ attributes `data-route-field`, `data-route-format`, `data-route-trend`,
 **Added**
 
 - **"Updated … ago"** — `[date-age="2026-09-03 8:53"]` is replaced with the
-  age of that timestamp, floored to the largest whole unit and localised:
-  `23 hours`, `4 days`, `2 weeks` / `4 dagen` on NL pages. A zone-less value is
+  age of that timestamp, floored to the largest whole unit and abbreviated:
+  `23h`, `4d`, `2w`, `1mo`, `1y` — `23u`, `1mnd`, `1jr` on NL pages. A zone-less value is
   read as UTC. The trailing "ago" copy stays a sibling in the Designer.
 - **Related-routes carousel** — the Swiper init moves into this bundle, built
   only when `.swiper-card-link_wrapper` and at least one slide exist. Webflow
