@@ -801,6 +801,86 @@ Chart.register(
     else setChartEmpty('price-history', host, true);
   }
 
+  /* ------------------------------------------------------ updated age */
+  /* [date-age="2026-09-03 8:53"] (also accepted: data-date-age, data-age) is
+     the sync timestamp. The script writes how long ago that was — "23 hours",
+     "4 days", "2 weeks" — localised through Intl, so the NL page reads
+     "4 dagen". The trailing copy ("ago" / "geleden") stays a sibling element in
+     the Designer, same as every other unit on the page.
+
+     A value with no timezone is read as UTC, matching the API's generatedAt;
+     an ISO value carrying Z or an offset is honoured as given. Floor, never
+     round: 23h59m is still "23 hours". */
+  var AGE_ATTRS = ['date-age', 'data-date-age', 'data-age'];
+
+  function parseStamp(raw) {
+    if (!raw) return null;
+    var str = String(raw).trim();
+    var m =
+      /^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?\s*(Z|[+-]\d{2}:?\d{2})?$/i.exec(
+        str
+      );
+    if (!m) {
+      var fallback = new Date(str);
+      return isNaN(fallback.getTime()) ? null : fallback;
+    }
+    var ms = Date.UTC(+m[1], +m[2] - 1, +m[3], +(m[4] || 0), +(m[5] || 0), +(m[6] || 0));
+    if (m[7] && m[7].toUpperCase() !== 'Z') {
+      var sign = m[7].charAt(0) === '-' ? -1 : 1;
+      var off = +m[7].slice(1, 3) * 60 + +m[7].slice(-2);
+      ms -= sign * off * 60000;
+    }
+    return new Date(ms);
+  }
+
+  function ageParts(then, now) {
+    var min = Math.max(0, Math.floor((now - then) / 60000));
+    var hr = Math.floor(min / 60);
+    var day = Math.floor(hr / 24);
+    if (hr < 1) return { value: Math.max(1, min), unit: 'minute' };
+    if (day < 1) return { value: hr, unit: 'hour' };
+    if (day < 7) return { value: day, unit: 'day' };
+    if (day < 35) return { value: Math.floor(day / 7), unit: 'week' };
+    if (day < 365) return { value: Math.max(1, Math.floor(day / 30.44)), unit: 'month' };
+    return { value: Math.floor(day / 365.25), unit: 'year' };
+  }
+
+  function formatAge(parts) {
+    try {
+      return new Intl.NumberFormat(LOCALE, {
+        style: 'unit',
+        unit: parts.unit,
+        unitDisplay: 'long',
+      }).format(parts.value);
+    } catch (e) {
+      // Very old engines without unit formatting: plain English.
+      return parts.value + ' ' + parts.unit + (parts.value === 1 ? '' : 's');
+    }
+  }
+
+  function updatedAge() {
+    var entries = [];
+    AGE_ATTRS.forEach(function (attr) {
+      Array.prototype.forEach.call(document.querySelectorAll('[' + attr + ']'), function (el) {
+        var raw = el.getAttribute(attr);
+        var stamp = parseStamp(raw);
+        var entry = {
+          attr: attr,
+          raw: raw,
+          iso: stamp ? stamp.toISOString() : null,
+          text: null,
+          counter: el.getAttribute('data-element') === 'counter',
+        };
+        if (stamp) {
+          entry.text = formatAge(ageParts(stamp, Date.now()));
+          el.textContent = entry.text;
+        }
+        entries.push(entry);
+      });
+    });
+    return entries;
+  }
+
   /* ------------------------------------------------------ diagnostics */
   /* window.RouteInsights.check() — is every chart tagged, does its inline
      series parse, did it draw? Prints a summary; auto-runs on ?route-debug. */
@@ -907,6 +987,24 @@ Chart.register(
             .join(', ')
       );
 
+    var updated = window.RouteInsights.updated || [];
+    updated.forEach(function (u) {
+      if (!u.iso)
+        problems.push(
+          '[' +
+            u.attr +
+            '="' +
+            u.raw +
+            '"] does not parse as a date — expected YYYY-MM-DD HH:MM (ISO with Z preferred)'
+        );
+      if (u.counter)
+        problems.push(
+          'the [' +
+            u.attr +
+            '] element also carries data-element="counter" — animation.js will overwrite it; remove that attribute'
+        );
+    });
+
     var trends = document.querySelectorAll('[data-route-trend]').length;
 
     var report = {
@@ -915,6 +1013,7 @@ Chart.register(
       status: window.RouteInsights.status,
       charts: charts,
       windows: document.querySelectorAll('[data-route-window]').length,
+      updated: updated,
       trendBadges: trends,
       legacy: legacy,
     };
@@ -939,7 +1038,7 @@ Chart.register(
 
   /* Published at script-evaluation time so `RouteInsights.status` can tell
      "never loaded" (ReferenceError) from "loaded but never booted" ('idle'). */
-  window.RouteInsights = { status: 'idle', charts: {}, check: check };
+  window.RouteInsights = { status: 'idle', charts: {}, updated: [], check: check };
 
   /* price-history schedules its own first draw (wirePriceWindows defers it
      until the container is on screen, but wires the toggles immediately). The
@@ -968,6 +1067,7 @@ Chart.register(
   function boot() {
     var hosts = document.querySelectorAll('[data-route-chart]');
     var debug = /[?&]route-debug\b/.test(window.location.search);
+    window.RouteInsights.updated = updatedAge();
     if (!hosts.length) {
       window.RouteInsights.status = 'no-charts'; // not a route page
       if (debug) check();

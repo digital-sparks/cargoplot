@@ -4,7 +4,9 @@
 >
 > Every KPI, trend and related card on a Routes page is now rendered
 > **server-side by Webflow** from CMS fields synced from the Cargoplot API.
-> The script no longer fetches a payload and no longer writes any text.
+> The script no longer fetches a payload and writes no KPI text. The one
+> client-side value is the relative **updated age** (`date-age`, below), which
+> can only be computed in the browser.
 >
 > Its only job is the **four charts**. Each chart container carries its own
 > series inline, bound from one CMS field per chart:
@@ -21,7 +23,7 @@
 > `priceByCarrier`). **`data-route-json` now means inline JSON, not a URL.**
 >
 > Still read: `data-route-chart`, `data-route-json` (on charts),
-> `data-route-window`, `data-route-empty`.
+> `data-route-window`, `data-route-empty`, `date-age`.
 > **No longer read:** `data-route-field`, `data-route-format`,
 > `data-route-trend`, `data-route-show`, `data-route-card` — inert; delete
 > them from the Designer when convenient. The sections below that describe them
@@ -159,6 +161,27 @@ good for onTimeRate — colour via the classes per badge.
 ⚠️ The script **rebuilds the badge's contents** on load (chevron + value). An
 icon placed inside the badge in the Designer will be discarded — style the
 injected chevron via the badge's `color` instead.
+
+### `date-age` — "Updated … ago"
+
+```html
+<div date-age="2026-09-03 8:53">2026</div><div>ago</div>
+```
+
+The attribute holds the sync timestamp; the script replaces the element's text
+with how long ago that was, floored to the largest whole unit — `23 hours`,
+`1 day`, `4 days`, `2 weeks`, `1 month`, `1 year` — localised through
+Intl, so the NL page reads `4 dagen`. Keep the trailing copy ("ago" /
+"geleden") in a **sibling** element, as with every other unit on the page.
+`data-date-age` and `data-age` are accepted as well.
+
+- **Timestamp format:** `YYYY-MM-DD HH:MM` is read as **UTC** (matching the
+  API's `generatedAt`). Prefer full ISO with a zone — `2026-09-03T08:53:00Z` —
+  which is honoured as given. Unparseable → text left as rendered, `check()`
+  flags it.
+- ⚠️ **Do not put `data-element="counter"` on this element.** animation.js
+  captures the number at init and tweens it on scroll-in, overwriting the
+  age. `check()` flags this too.
 
 ### `data-route-chart` — chart containers (script injects the canvas)
 

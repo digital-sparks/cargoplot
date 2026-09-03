@@ -48,8 +48,9 @@ switch back to `DOMContentLoaded` for one file.
 
 ### 4. Charts read their series inline — there is no payload and no fallback
 
-Since v1.3 every KPI is CMS-rendered; the script never fetches and never writes
-text. Each `[data-route-chart]` carries its own series in `data-route-json`
+Since v1.3 every KPI is CMS-rendered; the script never fetches and writes no KPI
+text. The one exception is the relative "updated" age from `[date-age]`, which
+can only be computed client-side. Each `[data-route-chart]` carries its own series in `data-route-json`
 (inline JSON, **not** a URL). A container whose attribute is missing, blank or
 unparseable shows its placeholder — never invent data, never derive a URL, and
 never resolve route identity in JS.
