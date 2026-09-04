@@ -198,11 +198,15 @@ Chart.register(
     });
   }
 
-  /* Chart.js animates on construction, so building a chart the moment the JSON
-     lands means it has already animated by the time the reader scrolls to it.
-     Hold construction until the container is actually on screen. Used by all
-     four charts. Fires immediately for anything already in view, and degrades
-     to rendering straight away where IntersectionObserver is unavailable. */
+  /* Chart.js animates on construction, so building a chart the moment the
+     page lands means it has already animated by the time the reader scrolls
+     to it. Hold construction until the container is about to enter the
+     viewport instead — REVEAL_MARGIN below the fold — so the draw is under
+     way as it scrolls in rather than starting once it is already in view.
+     Used by all four charts. Fires immediately for anything already in view,
+     and degrades to rendering straight away where IntersectionObserver is
+     unavailable. */
+  var REVEAL_MARGIN = '0px 0px 25% 0px'; // start a quarter-viewport before the container shows
   function whenVisible(el, render) {
     if (typeof window.IntersectionObserver !== 'function') {
       render();
@@ -220,10 +224,10 @@ Chart.register(
       },
       /* threshold 0 rather than a ratio: a ratio can never be met by a
          zero-area container (one collapsed by CSS, or inside a hidden panel),
-         which would leave that chart permanently unrendered. The negative
-         bottom margin is what makes it read as "scrolled to" rather than
-         "one pixel peeked in". */
-      { threshold: 0, rootMargin: '0px 0px -15% 0px' }
+         which would leave that chart permanently unrendered. The bottom
+         margin grows the root, so "intersecting" means within that distance
+         below the fold. */
+      { threshold: 0, rootMargin: REVEAL_MARGIN }
     );
     io.observe(el);
   }

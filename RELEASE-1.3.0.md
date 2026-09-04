@@ -50,6 +50,9 @@ attributes `data-route-field`, `data-route-format`, `data-route-trend`,
   renders neither for an empty multi-reference, which is what crashed the
   standalone script.
 - **Price-window chips hide when the chart is empty**, not just per window.
+- **Charts start drawing earlier** — when the container is a quarter of the
+  viewport below the fold, instead of 15% inside it, so a chart is animating
+  as it scrolls in rather than after.
 - `RouteInsights.check()` rebuilt for the new model: per-chart series state,
   sampled points, rendered/empty, container geometry, the `date-age` element,
   the carousel — and it flags the old `#route-data` embed and any legacy
@@ -64,10 +67,16 @@ screen were never evaluated as "already in view". Anything inside the
 viewport at init now plays immediately; ScrollTrigger is only attached to
 elements still below the fold.
 
+**Counters keep their decimals.** The count-up rounded every figure to a
+whole number and ended there — `91.4` on-time became `91`. It now mirrors the
+printed figure: decimals as the CMS number field renders them, any thousands
+separator, prefix and suffix, with the tween stepping in the last printed
+digit (`0.0 → 91.4`). Text with no figure in it is left untouched.
+
 The 1.2.0 counter deferral (waiting for `route-insights:ready`) is removed.
 It only existed because the script overwrote counter targets after animation
 captured them; with values CMS-rendered and no script writes, its premise is
-gone. Only the tween block differs from 1.1.0.
+gone.
 
 ## Fixed — `resource-hub.js`, `platform.js`
 
@@ -82,10 +91,10 @@ wins, and loading `resource-hub.js` on the Routes template is safe.
 ## Upgrade notes
 
 **Site-wide bundles:** `animation.js`, `resource-hub.js` and `platform.js`
-load on many pages. Each change is guarded and small (`animation.js`: 16
-lines in, 4 out), but worth a look on a non-route page before tagging —
-counters still animate, and the card-link carousel still builds where it has
-slides.
+load on many pages. Each change is guarded and contained (`animation.js`:
+only the counter block), but worth a look on a non-route page before tagging —
+counters still animate and land on their printed value, and the card-link
+carousel still builds where it has slides.
 
 **Bundle size:** `route-insights.js` is 205 → 309 KB — that is Swiper's core
 and modules, moved in from the standalone script. Net bytes for the page are

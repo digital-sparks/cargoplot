@@ -282,76 +282,75 @@ window.Webflow.push(() => {
     const originalText = target.textContent.trim();
     const counter = { value: 0 };
 
-    // Parse the target value and format info
+    /* Mirror whatever Webflow printed. The CMS number field decides the
+       decimals — "91.4" one, "44.75" two, "3185" none — and the count-up has
+       to land on exactly that text, so the printed precision drives both the
+       display and the tween's step. Webflow prints a dot decimal and no
+       thousands grouping; the comma/period handling is for a Designer-typed
+       figure or a localised page, where the two swap roles. */
+    const COMMA_DECIMAL = /^(nl|de|fr|es|it|pt)/i.test(document.documentElement.lang || '');
+
     const parseValue = (text) => {
-      // Extract prefix (any non-digit, non-decimal characters at start)
-      const prefixMatch = text.match(/^[^\d.-]*/);
-      const prefix = prefixMatch ? prefixMatch[0] : '';
+      // The figure is the first digit run, separators allowed between digits
+      const match = text.match(/(-?)(\d[\d.,]*\d|\d)/);
+      if (!match) return null;
 
-      // Remove prefix to work with the rest
-      let remaining = text.slice(prefix.length);
+      const prefix = text.slice(0, match.index);
+      const suffix = text.slice(match.index + match[0].length);
+      const digits = match[2];
 
-      // Handle K, M multipliers (check before extracting suffix)
-      let multiplier = 1;
-      let unit = '';
-      if (remaining.endsWith('K') || remaining.endsWith('k')) {
-        multiplier = 1000;
-        unit = remaining.slice(-1);
-        remaining = remaining.slice(0, -1);
-      } else if (remaining.endsWith('M') || remaining.endsWith('m')) {
-        multiplier = 1000000;
-        unit = remaining.slice(-1);
-        remaining = remaining.slice(0, -1);
+      const seps = digits.match(/[.,]/g) || [];
+      const lastIdx = Math.max(digits.lastIndexOf('.'), digits.lastIndexOf(','));
+      const lastSep = lastIdx < 0 ? '' : digits[lastIdx];
+      const after = digits.length - lastIdx - 1; // digits after the last separator
+
+      let decimalSep = '';
+      let groupSep = '';
+      if (seps.some((s) => s !== lastSep)) {
+        decimalSep = lastSep; // 1,234.56 — the last kind is the decimal
+        groupSep = lastSep === '.' ? ',' : '.';
+      } else if (seps.length > 1) {
+        groupSep = lastSep; // 1,234,567
+      } else if (seps.length === 1) {
+        // A lone separator before exactly three digits is grouping only when
+        // it is this locale's grouping character: "1,234" here, "1.234" on NL.
+        if (after === 3 && lastSep === (COMMA_DECIMAL ? '.' : ',')) groupSep = lastSep;
+        else decimalSep = lastSep; // 91.4 / 91,4
       }
 
-      // Extract suffix (any non-digit, non-decimal characters at end)
-      const suffixMatch = remaining.match(/[^\d.-]*$/);
-      const suffix = suffixMatch ? suffixMatch[0] : '';
-
-      // Get the numeric part
-      const numericPart = remaining.slice(0, remaining.length - suffix.length);
-      const numValue = parseFloat(numericPart) * multiplier;
+      let numeric = groupSep ? digits.split(groupSep).join('') : digits;
+      if (decimalSep === ',') numeric = numeric.replace(',', '.');
 
       return {
-        value: numValue,
+        value: parseFloat(numeric) * (match[1] ? -1 : 1),
+        decimals: decimalSep ? after : 0,
+        decimalSep,
+        groupSep,
         prefix,
         suffix,
-        unit,
-        multiplier,
-        hasDecimal: numericPart.includes('.'),
       };
     };
 
     const formatValue = (value, format) => {
-      let displayValue = value;
-
-      // Convert back to unit format
-      if (format.unit) {
-        displayValue = value / format.multiplier;
-        // Keep decimal if original had one
-        if (format.hasDecimal) {
-          displayValue = displayValue.toFixed(1);
-        } else {
-          displayValue = Math.round(displayValue);
-        }
-        displayValue += format.unit;
-      } else {
-        displayValue = Math.round(value);
-      }
-
-      return format.prefix + displayValue + format.suffix;
+      const fixed = Math.abs(value).toFixed(format.decimals);
+      const [whole, fraction] = fixed.split('.');
+      const grouped = format.groupSep ? whole.replace(/\B(?=(\d{3})+$)/g, format.groupSep) : whole;
+      const sign = value < 0 && Number(fixed) !== 0 ? '-' : ''; // never "-0"
+      const decimalsPart = fraction ? format.decimalSep + fraction : '';
+      return format.prefix + sign + grouped + decimalsPart + format.suffix;
     };
 
     const parsed = parseValue(originalText);
+    if (!parsed) return; // no figure in the text — leave it as rendered
 
-    // Set initial state to 0
+    // Set initial state to 0, at the same precision ("0.0" for "91.4")
     target.textContent = formatValue(0, parsed);
 
     const tween = {
       value: parsed.value,
       duration: 2,
       ease: 'power2.out',
-      snap: { value: 1 },
+      snap: { value: Math.pow(10, -parsed.decimals) }, // step of the last printed digit
       onUpdate: function () {
         target.textContent = formatValue(counter.value, parsed);
       },

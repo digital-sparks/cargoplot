@@ -201,6 +201,10 @@ mockup image that must be deleted.
 
 Container gets `data-empty="true"` when a series has no data.
 
+Each chart is built when its container comes within a quarter of the viewport
+height **below** the fold (`REVEAL_MARGIN` in the script), so the draw
+animation is already under way as it scrolls in.
+
 ### `data-route-empty` — "No data available" placeholders
 
 One per chart, value **identical to the `data-route-chart` value it belongs to**:
@@ -303,11 +307,14 @@ the branch missing from the payload entirely:
 
 ## Coexisting attributes — do not touch
 
-Several tagged elements also carry `data-element="counter"` (Webflow count-up
-animation) and the FAQ uses `fs-accordion-*` (Finsweet). The script only sets
-textContent; if the counter animation fights the injected values, decide in
-Claude Code whether to strip `data-element="counter"` from JSON-driven
-elements or hook the animation to `route-insights:ready`.
+Several tagged elements also carry `data-element="counter"` (the count-up in
+animation.js) and the FAQ uses `fs-accordion-*` (Finsweet). Since v1.3 the
+script writes no KPI text, so the two no longer race — only the `date-age`
+element must not carry the counter. The count-up mirrors the printed figure
+exactly: decimals as the CMS number field renders them (`91.4` → one,
+`44.75` → two), any thousands separator, prefix and suffix text — and steps in
+the last printed digit (`0.0 → 91.4`). It plays on load for anything already
+in view and on scroll-in below the fold.
 
 ## Runtime API / debugging
 
