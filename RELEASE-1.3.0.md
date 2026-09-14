@@ -11,8 +11,9 @@ related-routes carousel.
 as its payload URL — the leftover `#route-data` embed, now empty — and
 concludes there is no data. 1.3.0 reads per chart and ignores that embed.
 
-Four bundles change: `route-insights.js`, `animation.js`, `resource-hub.js`,
-`platform.js`. See **Upgrade notes** for the two that load site-wide.
+Five bundles change: `route-insights.js`, `animation.js`, `resource-hub.js`,
+`platform.js`, `rate-module.js`. See **Upgrade notes** for the ones that load
+site-wide.
 
 ---
 
@@ -86,12 +87,20 @@ slides. Both now build only when the wrapper and a slide exist, and stand
 down if another bundle has already initialised it — so whichever runs first
 wins, and loading `resource-hub.js` on the Routes template is safe.
 
+## Fixed — `rate-module.js`
+
+**The cargo-type placeholder keeps its Designer text.** The script set it to
+the English "Select cargo type" at init on every locale, so Dutch visitors saw
+English there while the other fields read Dutch. It now leaves the Designer's
+localised placeholder alone ("Selecteer type" on `/nl`) and only falls back
+to the English text when an instance has none.
+
 ---
 
 ## Upgrade notes
 
-**Site-wide bundles:** `animation.js`, `resource-hub.js` and `platform.js`
-load on many pages. Each change is guarded and contained (`animation.js`:
+**Site-wide bundles:** `animation.js`, `resource-hub.js`, `platform.js` and
+`rate-module.js` load on many pages. Each change is guarded and contained (`animation.js`:
 only the counter block), but worth a look on a non-route page before tagging —
 counters still animate and land on their printed value, and the card-link
 carousel still builds where it has slides.
@@ -130,11 +139,12 @@ git push origin 1.3.0
 ```
 
 `@1` resolves to the newest `1.x` tag, so this goes live everywhere at once.
-jsDelivr caches version tags permanently; purge the four bundles:
+jsDelivr caches version tags permanently; purge the five bundles:
 
 ```
 https://purge.jsdelivr.net/gh/digital-sparks/cargoplot@1/dist/route-insights.js
 https://purge.jsdelivr.net/gh/digital-sparks/cargoplot@1/dist/animation.js
 https://purge.jsdelivr.net/gh/digital-sparks/cargoplot@1/dist/resource-hub.js
 https://purge.jsdelivr.net/gh/digital-sparks/cargoplot@1/dist/platform.js
+https://purge.jsdelivr.net/gh/digital-sparks/cargoplot@1/dist/rate-module.js
 ```

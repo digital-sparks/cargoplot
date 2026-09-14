@@ -873,7 +873,10 @@ class CargoFormModule {
     cargoInput.setAttribute('role', 'combobox');
     cargoInput.setAttribute('aria-autocomplete', 'list');
     cargoInput.setAttribute('aria-expanded', 'false');
-    cargoInput.placeholder = 'Select cargo type';
+    // The Designer owns the placeholder — Webflow Localization renders it per
+    // locale ("Selecteer type" on /nl). Only fall back to English when an
+    // instance was left without one.
+    if (!cargoInput.placeholder) cargoInput.placeholder = 'Select cargo type';
 
     cargoSelect.style.display = 'none';
 
