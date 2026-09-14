@@ -200,13 +200,14 @@ Chart.register(
 
   /* Chart.js animates on construction, so building a chart the moment the
      page lands means it has already animated by the time the reader scrolls
-     to it. Hold construction until the container is about to enter the
-     viewport instead — REVEAL_MARGIN below the fold — so the draw is under
-     way as it scrolls in rather than starting once it is already in view.
-     Used by all four charts. Fires immediately for anything already in view,
-     and degrades to rendering straight away where IntersectionObserver is
-     unavailable. */
-  var REVEAL_MARGIN = '0px 0px 25% 0px'; // start a quarter-viewport before the container shows
+     to it. Hold construction until the container's top edge enters the
+     viewport, so the reader sees the whole draw. REVEAL_MARGIN moves that
+     point: a positive bottom value starts the draw before the container shows
+     (25% had it mostly finished by the time it was in view), a negative one
+     waits until part of it is on screen. Used by all four charts. Fires
+     immediately for anything already in view, and degrades to rendering
+     straight away where IntersectionObserver is unavailable. */
+  var REVEAL_MARGIN = '0px 0px 0px 0px'; // start as the container enters the viewport
   function whenVisible(el, render) {
     if (typeof window.IntersectionObserver !== 'function') {
       render();
@@ -756,6 +757,18 @@ Chart.register(
               color: COLORS.tick,
               padding: init.namePad,
             },
+            /* A vertical axis reserves half a label line plus ticks.padding
+               above and below the plot for label overflow — about 27px each
+               on desktop. That comes out of the rows the height was sized
+               for, and with a single carrier it exceeds the 52px canvas: the
+               plot area collapses to zero and the bar is clipped away while
+               the name and price, drawn outside the plot, still show. The
+               category centres already sit half a row from the edges, so the
+               labels fit without the reserve. Drop it once the axis has fit. */
+            afterFit: function (scale) {
+              scale.paddingTop = 0;
+              scale.paddingBottom = 0;
+            },
           },
         },
       },
@@ -811,7 +824,11 @@ Chart.register(
       t.classList.toggle('is-disabled', !ok);
       t.style.display = ok ? '' : 'none';
       if (!ok) return;
-      t.addEventListener('click', function () {
+      /* The chips are <a href="#"> in the Designer; without this a click also
+         runs the link's default action, a jump to the top of the page, in any
+         browser where Webflow does not intercept bare-hash links. */
+      t.addEventListener('click', function (event) {
+        event.preventDefault();
         select(t, months);
       });
       // Prefer the 12M window; otherwise the first window that has data.
