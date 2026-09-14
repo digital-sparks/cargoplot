@@ -201,9 +201,10 @@ mockup image that must be deleted.
 
 Container gets `data-empty="true"` when a series has no data.
 
-Each chart is built when its container comes within a quarter of the viewport
-height **below** the fold (`REVEAL_MARGIN` in the script), so the draw
-animation is already under way as it scrolls in.
+Each chart is built as its container's top edge enters the viewport
+(`REVEAL_MARGIN` in the script, `0px` all round), so the reader sees the whole
+draw animation; a positive bottom margin would start it before the container
+shows.
 
 ### `data-route-empty` — "No data available" placeholders
 
@@ -313,8 +314,23 @@ script writes no KPI text, so the two no longer race — only the `date-age`
 element must not carry the counter. The count-up mirrors the printed figure
 exactly: decimals as the CMS number field renders them (`91.4` → one,
 `44.75` → two), any thousands separator, prefix and suffix text — and steps in
-the last printed digit (`0.0 → 91.4`). It plays on load for anything already
-in view and on scroll-in below the fold.
+the last printed digit (`0.0 → 91.4`). It starts when the element comes into
+view — an IntersectionObserver, firing when the element's bottom edge
+enters the viewport, i.e. the element is fully in view (`bottom 100%` in
+ScrollTrigger terms);
+anything already in view starts on load, anything already scrolled past plays
+at once. Three things keep a mid-count
+number away from anything that indexes the page: the value is left exactly
+as rendered until the moment the counter starts (a crawler with a normal
+viewport never brings a below-the-fold counter into view); crawlers,
+headless renderers and automated browsers, which announce themselves in the
+user agent or `navigator.webdriver`, get no animation at all, only the
+values, as does `prefers-reduced-motion`; and only the number's own text
+node is written, so a unit inside the same element (`56.73<span>%</span>`)
+keeps its markup. Add **`?counter-debug`** to a
+URL to see the trigger points: a dashed line along the bottom edge of the
+viewport where counters start, a bar on each counter's bottom edge that turns
+green when it fires, and a console line per start.
 
 ## Runtime API / debugging
 

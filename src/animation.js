@@ -264,13 +264,108 @@ window.Webflow.push(() => {
 
   // ... rest of code ...
 
+  /* The count-up rewrites the number's text, so for the two seconds it runs
+     the DOM carries a value from partway through. Three things keep that
+     away from anything that indexes the page. The value is left exactly as
+     rendered until the moment a counter starts — a crawler with a normal
+     viewport never brings a below-the-fold counter into view. Crawlers,
+     headless renderers and automated browsers, which announce themselves,
+     get no animation at all, only the values; so does anyone who asked for
+     reduced motion. And only the number's own text node is written, so a
+     unit that lives inside the same element ("56.73<span>%</span>") keeps its
+     markup and style. */
+  const isCrawler =
+    navigator.webdriver === true ||
+    /bot|crawl|spider|slurp|inspectiontool|lighthouse|headless|prerender/i.test(
+      navigator.userAgent
+    );
+  const reduceMotion =
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /* A counter starts when it comes into view. An IntersectionObserver rather
+     than ScrollTrigger: ScrollTrigger measures its trigger positions once (at
+     creation and on refresh) and anything that changes the page height after
+     that — charts building lazily, the carrier chart sizing itself, images
+     arriving — leaves those positions stale. That is how the counters near
+     the foot of a route page came to start only at the very bottom on desktop
+     and never on a phone, where the shifts are larger. The observer reads the
+     real geometry at the moment of scrolling and fires straight away for
+     anything already in view (so the hero needs no special case). Starts when
+     the element's bottom edge enters the viewport ('bottom 100%' in
+     ScrollTrigger terms): threshold 1 asks for the whole element to be inside
+     the root, whose bottom edge is the viewport's own. The root is extended
+     far above the viewport so an element the reader has already scrolled
+     past — a reload restored further down, an anchor jump straight over it —
+     is fully inside too and plays at once rather than sitting at 0; a plain
+     observer never fires for a jump from below the viewport to above it,
+     since neither state intersects. */
+  const COUNTER_REVEAL_MARGIN = '100000px 0px 0px 0px';
+
+  /* ?counter-debug — markers in the spirit of ScrollTrigger's: a dashed line
+     along the bottom edge of the viewport, which is where counters start (an
+     element starts once its bottom edge has entered), and a bar on each
+     counter's bottom edge — the edge that has to cross the line — that turns
+     green the moment it fires, with a console line per start. */
+  const counterDebug = /[?&]counter-debug\b/.test(window.location.search);
+  if (counterDebug) {
+    const line = document.createElement('div');
+    line.style.cssText =
+      'position:fixed;left:0;right:0;bottom:0;border-bottom:2px dashed #d6336c;z-index:2147483647;' +
+      'pointer-events:none;font:12px/1.4 monospace;color:#d6336c;padding:2px 8px';
+    line.textContent = 'counters start when their bottom edge enters the viewport (bottom 100%)';
+    document.body.appendChild(line);
+  }
+  const markCounter = (el) => {
+    if (!counterDebug) return null;
+    if (getComputedStyle(el).position === 'static') el.style.position = 'relative';
+    const bar = document.createElement('span');
+    bar.setAttribute('aria-hidden', 'true');
+    bar.style.cssText =
+      'position:absolute;left:0;right:0;bottom:0;border-bottom:3px solid #f59f00;pointer-events:none';
+    el.appendChild(bar);
+    return bar;
+  };
+  const whenCounterVisible = (el, play) => {
+    if (typeof window.IntersectionObserver !== 'function') {
+      play();
+      return;
+    }
+    const io = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting && entry.intersectionRatio >= 0.999) {
+            io.disconnect();
+            play();
+            return;
+          }
+        }
+      },
+      { threshold: 1, rootMargin: COUNTER_REVEAL_MARGIN }
+    );
+    io.observe(el);
+  };
+
+  /* The first text node under the element that holds a digit — the number
+     itself, whether the element is just "10525" or "56.73<span>%</span>". */
+  const findNumberText = (el) => {
+    for (const node of el.childNodes) {
+      if (node.nodeType === 3 && /\d/.test(node.nodeValue)) return node;
+      if (node.nodeType === 1) {
+        const inner = findNumberText(node);
+        if (inner) return inner;
+      }
+    }
+    return null;
+  };
+
   const targets = document.querySelectorAll('[data-element=counter]');
 
   targets.forEach((target) => {
     /* A timestamp element ([date-age] and friends) is not a number to count
-       up — route-insights.js writes "4 days" into it. Skip it here so the
-       result no longer depends on which of the two async bundles Webflow's
-       queue happens to run first. */
+       up — route-insights.js writes "4d" into it. Skip it here so the result
+       no longer depends on which of the two async bundles Webflow's queue
+       happens to run first. */
     if (
       target.hasAttribute('date-age') ||
       target.hasAttribute('data-date-age') ||
@@ -279,7 +374,9 @@ window.Webflow.push(() => {
       return;
     }
 
-    const originalText = target.textContent.trim();
+    const numberNode = findNumberText(target);
+    if (!numberNode) return; // no figure in the element — leave it as rendered
+    const originalText = numberNode.nodeValue.trim();
     const counter = { value: 0 };
 
     /* Mirror whatever Webflow printed. The CMS number field decides the
@@ -341,10 +438,12 @@ window.Webflow.push(() => {
     };
 
     const parsed = parseValue(originalText);
-    if (!parsed) return; // no figure in the text — leave it as rendered
+    if (!parsed || isCrawler || reduceMotion) return; // the value is already on the page
 
-    // Set initial state to 0, at the same precision ("0.0" for "91.4")
-    target.textContent = formatValue(0, parsed);
+    const marker = markCounter(target);
+    const show = (value) => {
+      numberNode.nodeValue = formatValue(value, parsed);
+    };
 
     const tween = {
       value: parsed.value,
@@ -352,28 +451,17 @@ window.Webflow.push(() => {
       ease: 'power2.out',
       snap: { value: Math.pow(10, -parsed.decimals) }, // step of the last printed digit
       onUpdate: function () {
-        target.textContent = formatValue(counter.value, parsed);
+        show(counter.value);
       },
     };
 
-    /* Anything already on screen when this runs counts up straight away.
-       ScrollTrigger is only asked to watch elements still below the fold —
-       leaning on it for the hero left the KPI cards sitting at 0 until the
-       reader's first scroll, because its initial measurement happens before
-       the page's intro animations have settled the layout. */
-    const rect = target.getBoundingClientRect();
-    const alreadyInView = rect.top < window.innerHeight && rect.bottom > 0;
-    if (!alreadyInView) {
-      tween.scrollTrigger = {
-        trigger: target,
-        start: 'top 80%', // Animation starts when element is 80% into viewport
-        end: 'bottom 20%',
-        toggleActions: 'play none none none', // Play on enter, reverse on leave
-        once: true, // Only animate once
-        // markers: true, // Remove in production
-      };
-    }
-
-    gsap.to(counter, tween);
+    whenCounterVisible(target, () => {
+      if (marker) {
+        marker.style.borderBottomColor = '#2f9e44';
+        console.log('[counters] start:', originalText);
+      }
+      show(0); // from here on the text is the count; until now it was the value
+      gsap.to(counter, tween);
+    });
   });
 });
