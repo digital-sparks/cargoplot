@@ -95,6 +95,15 @@ English there while the other fields read Dutch. It now leaves the Designer's
 localised placeholder alone ("Selecteer type" on `/nl`) and only falls back
 to the English text when an instance has none.
 
+**Prefill only a complete lane.** A page that binds only a country into the
+prefill attributes (the country pages) used to get `China` dropped into the
+origin or destination and accepted as chosen; the rates page then received a
+country-only lane it cannot resolve and shows an invalid result with no error
+state. A field is now prefilled only when both city and country are present
+(or the combined attribute is already in `City, Country` form); otherwise it
+stays empty with its placeholder. Route pages bind both halves and are
+unchanged.
+
 ---
 
 ## Upgrade notes

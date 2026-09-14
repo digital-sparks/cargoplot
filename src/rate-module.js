@@ -185,6 +185,21 @@ function getLocale() {
 }
 
 /**
+ * A lane is only usable as "City, Country" — the form the dropdown produces
+ * and the rates page expects. A country page binds the country alone, and a
+ * country-only origin reaches the rates page as an invalid lane with no error
+ * state, so anything short of both halves prefills nothing. The combined
+ * attribute counts only when it already has that two-part form.
+ */
+function completeLane(combined, city, country) {
+  if (combined) {
+    const parts = combined.split(',').map((part) => part.trim());
+    return parts.length >= 2 && parts[0] && parts[parts.length - 1] ? parts.join(', ') : '';
+  }
+  return city && country ? `${city}, ${country}` : '';
+}
+
+/**
  * Generates a unique ID for elements within a module
  */
 function generateUniqueId(moduleIndex, prefix) {
@@ -423,15 +438,20 @@ class CargoFormModule {
    * Build one "City, Country" string. Prefers the combined attribute when it
    * is set, otherwise joins the separate city/country ones — a Webflow
    * attribute value only takes a single variable, so those are the practical
-   * way to bind two CMS fields. Missing halves are skipped rather than
-   * producing a dangling comma.
+   * way to bind two CMS fields. Only a complete pair is returned: a page that
+   * binds just a country (the country pages) gets no prefill for that field.
    */
   prefillPair(combinedAttr, cityAttr, countryAttr) {
     const combined = this.prefillValue(combinedAttr);
-    if (combined) return combined;
-    return [this.prefillValue(cityAttr), this.prefillValue(countryAttr)]
-      .filter(Boolean)
-      .join(', ');
+    const city = this.prefillValue(cityAttr);
+    const country = this.prefillValue(countryAttr);
+    const lane = completeLane(combined, city, country);
+    if (!lane && (combined || city || country)) {
+      log(
+        `Module ${this.moduleIndex}: incomplete prefill skipped (${combined || city || country})`
+      );
+    }
+    return lane;
   }
 
   /**
