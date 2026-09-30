@@ -201,10 +201,15 @@ mockup image that must be deleted.
 
 Container gets `data-empty="true"` when a series has no data.
 
-Each chart is built as its container's top edge enters the viewport
-(`REVEAL_MARGIN` in the script, `0px` all round), so the reader sees the whole
-draw animation; a positive bottom margin would start it before the container
-shows.
+Every chart is built when the page loads, so its frame — axes, grid, labels,
+the carrier tracks and prices — is already there when the reader scrolls to
+it. The series is held back and draws in once half of the chart's height is
+on screen (`REVEAL_RATIO` in the script), so the animation plays while the
+chart is actually in view whatever the window size or scroll speed. A chart
+taller than the screen starts once it fills half of it. The draw is the
+Chart.js default, one second (`DRAW_ANIMATION`), for the reveal and for a
+chip click alike. `RouteInsights.check()` reports `held: true` for a chart
+still waiting.
 
 ### `data-route-empty` — "No data available" placeholders
 

@@ -198,37 +198,89 @@ Chart.register(
     });
   }
 
-  /* Chart.js animates on construction, so building a chart the moment the
-     page lands means it has already animated by the time the reader scrolls
-     to it. Hold construction until the container's top edge enters the
-     viewport, so the reader sees the whole draw. REVEAL_MARGIN moves that
-     point: a positive bottom value starts the draw before the container shows
-     (25% had it mostly finished by the time it was in view), a negative one
-     waits until part of it is on screen. Used by all four charts. Fires
-     immediately for anything already in view, and degrades to rendering
-     straight away where IntersectionObserver is unavailable. */
-  var REVEAL_MARGIN = '0px 0px 0px 0px'; // start as the container enters the viewport
-  function whenVisible(el, render) {
+  /* Every chart is built as soon as the page is ready, so its frame — axes,
+     grid, labels, the carrier tracks and price column — is in place before
+     the reader gets there. The series is held back and draws in once half of
+     the chart's height is on screen. Starting at the moment the first pixel
+     crossed the fold meant the draw was over before the chart had scrolled
+     into view for anyone not flicking the page — which is why some people saw
+     the animation and others, on the same laptop, never did. Measured against
+     the chart rather than the window, so it behaves the same at every window
+     size. Used by all four charts. Fires immediately for anything already
+     that far in, and where IntersectionObserver is unavailable. */
+  var REVEAL_RATIO = 0.5; // share of the chart's height that must be on screen
+
+  /* The draw itself is Chart.js's own default, one second of easeOutQuart —
+     the speed is not what was wrong, only when it played. It has to be
+     spelled out because a held chart is built with animation off, and
+     revealChart() needs something to switch on. A chip click rebuilds the
+     chart with the same draw. */
+  var DRAW_ANIMATION = { duration: 1000, easing: 'easeOutQuart' };
+
+  /* Holds a chart's series back until revealChart(). While held, nothing of
+     the series is painted — data labels included, since datalabels draws
+     after the datasets and is skipped along with them — and the pointer is
+     ignored, so no tooltip opens over a line that is not there yet. `only`
+     narrows the hold to one dataset: the carrier chart holds just its value
+     bars, because the tracks and the price column are static. Chart.js
+     cancels a draw or an event when the hook returns false. */
+  function holdSeries(only) {
+    return {
+      id: 'routeHold',
+      beforeInit: function (chart) {
+        chart.$routeHeld = true;
+      },
+      beforeDatasetsDraw: function (chart) {
+        return !(chart.$routeHeld && only === undefined);
+      },
+      beforeDatasetDraw: function (chart, args) {
+        return !(chart.$routeHeld && args.index === only);
+      },
+      beforeEvent: function (chart) {
+        return !chart.$routeHeld;
+      },
+    };
+  }
+
+  /* Plays the draw on a held chart: every element back to its starting
+     point, then an animated update from there. A chart that is no longer
+     held — a window chip was clicked first — is left alone. */
+  function revealChart(name) {
+    var chart = chartInstances[name];
+    if (!chart || !chart.$routeHeld) return;
+    chart.$routeHeld = false;
+    chart.options.animation = DRAW_ANIMATION;
+    chart.reset();
+    chart.update();
+  }
+
+  function whenVisible(el, reveal) {
     if (typeof window.IntersectionObserver !== 'function') {
-      render();
+      reveal();
       return;
     }
     var io = new window.IntersectionObserver(
       function (entries) {
         for (var i = 0; i < entries.length; i++) {
-          if (entries[i].isIntersecting) {
+          var e = entries[i];
+          /* Half of the chart on screen — or half of the screen filled by
+             it. The second only comes first for a chart taller than the
+             viewport (a long carrier list on a phone held sideways): one more
+             than twice as tall could never get half of itself on screen, and
+             its series would stay held. */
+          if (
+            e.isIntersecting &&
+            (e.intersectionRatio >= REVEAL_RATIO ||
+              e.intersectionRect.height >= window.innerHeight * REVEAL_RATIO)
+          ) {
             io.disconnect();
-            render();
+            reveal();
             return;
           }
         }
       },
-      /* threshold 0 rather than a ratio: a ratio can never be met by a
-         zero-area container (one collapsed by CSS, or inside a hidden panel),
-         which would leave that chart permanently unrendered. The bottom
-         margin grows the root, so "intersecting" means within that distance
-         below the fold. */
-      { threshold: 0, rootMargin: REVEAL_MARGIN }
+      // The steps below the ratio are where a tall chart gets that second look.
+      { threshold: [0.1, 0.2, 0.3, 0.4, REVEAL_RATIO] }
     );
     io.observe(el);
   }
@@ -354,9 +406,13 @@ Chart.register(
     };
     // Only price-history pads its layout; leave the key absent otherwise.
     if (opts.layout) options.layout = opts.layout;
+    /* Without an animation the chart is built held, for revealChart() to
+       play. A chip click passes one and draws straight away. */
+    options.animation = opts.animation || false;
 
     chartInstances[name] = new Chart(mountCanvas(host), {
       type: 'line',
+      plugins: opts.animation ? [] : [holdSeries()],
       data: {
         labels: pts.map(function (p) {
           return monthLabel(p.at);
@@ -396,8 +452,9 @@ Chart.register(
 
   /* Price history: 24 monthly points, windows sliced client-side.
      sampleSize:0 => null value, but the line is drawn straight through it. */
-  function renderPriceHistory(host, series, windowMonths) {
+  function renderPriceHistory(host, series, windowMonths, animation) {
     renderLineChart('price-history', host, series.points.slice(-windowMonths), {
+      animation: animation,
       pointRadius: 6,
       spanGaps: true,
       yFontSize: function () {
@@ -540,10 +597,11 @@ Chart.register(
           },
         ],
       },
-      plugins: [ChartDataLabels],
+      plugins: [ChartDataLabels, holdSeries()],
       options: {
         responsive: true,
         maintainAspectRatio: false,
+        animation: false, // built held; revealChart() switches the draw on
         layout: { padding: { top: 24 } },
         /* No tooltip and nothing clickable here, so there is nothing for a
            pointer to do — an empty event list switches off Chart.js's default
@@ -732,11 +790,12 @@ Chart.register(
           },
         ],
       },
-      plugins: [ChartDataLabels],
+      plugins: [ChartDataLabels, holdSeries(1)], // only the value bars wait
       options: {
         indexAxis: 'y',
         responsive: true,
         maintainAspectRatio: false,
+        animation: false, // built held; revealChart() switches the draw on
         layout: { padding: { right: geo.pad } },
         // Chart.js calls this after it resizes but before the next draw, so
         // mutating options here lands without forcing an extra update pass.
@@ -785,31 +844,20 @@ Chart.register(
         return p.sampleSize > 0;
       });
     }
-    /* The chips are wired and styled immediately — only the FIRST draw waits
-       for the chart to scroll into view. A click always draws straight away,
-       since by then the reader is looking at it. */
-    var drawn = false;
-    function select(toggle, months, deferFirstDraw) {
+    /* The default window is built held, like the other charts, and draws in
+       when it scrolls into view. A chip click rebuilds the chart and draws
+       straight away, since by then the reader is looking at it — a click that
+       lands before the reveal leaves the reveal nothing to do. */
+    function select(toggle, months, animation) {
       toggles.forEach(function (t) {
         t.classList.remove('is-active');
       });
       if (toggle) toggle.classList.add('is-active');
-      var draw = function () {
-        drawn = true;
-        renderPriceHistory(host, series, months);
-      };
-      if (!deferFirstDraw) {
-        draw();
-        return;
-      }
-      whenVisible(host, function () {
-        // A chip clicked before the chart scrolled in wins — don't clobber it.
-        if (!drawn) draw();
-      });
+      renderPriceHistory(host, series, months, animation);
     }
 
     if (!toggles.length) {
-      select(null, 12, true);
+      select(null, 12);
       return;
     }
 
@@ -829,7 +877,7 @@ Chart.register(
          browser where Webflow does not intercept bare-hash links. */
       t.addEventListener('click', function (event) {
         event.preventDefault();
-        select(t, months);
+        select(t, months, DRAW_ANIMATION);
       });
       // Prefer the 12M window; otherwise the first window that has data.
       if (!defaultToggle || (months === 12 && defaultMonths !== 12)) {
@@ -837,7 +885,7 @@ Chart.register(
         defaultMonths = months;
       }
     });
-    if (defaultToggle) select(defaultToggle, defaultMonths, true);
+    if (defaultToggle) select(defaultToggle, defaultMonths);
     else setChartEmpty('price-history', host, true);
   }
 
@@ -1005,6 +1053,8 @@ Chart.register(
         sampled: sampledCount(read.series),
         placeholder: !!placeholder,
         rendered: !!host.querySelector('canvas'),
+        // built, but the series is still waiting for the chart to scroll in
+        held: !!(chartInstances[name] && chartInstances[name].$routeHeld),
         empty: host.getAttribute('data-empty') === 'true',
       };
       if (canMeasure && typeof host.getBoundingClientRect === 'function') {
@@ -1125,28 +1175,14 @@ Chart.register(
     check: check,
   };
 
-  /* price-history schedules its own first draw (wirePriceWindows defers it
-     until the container is on screen, but wires the toggles immediately). The
-     other three are deferred here. */
+  /* Each of these builds its chart with the series held back; boot() then
+     schedules the reveal. price-history goes through wirePriceWindows, which
+     also wires the window chips. */
   var RENDERERS = {
-    'price-history': function (host, series) {
-      wirePriceWindows(host, series);
-    },
-    'weekly-delay': function (host, series) {
-      whenVisible(host, function () {
-        renderWeeklyDelay(host, series);
-      });
-    },
-    'transit-trend': function (host, series) {
-      whenVisible(host, function () {
-        renderTransitTrend(host, series);
-      });
-    },
-    'carrier-prices': function (host, series) {
-      whenVisible(host, function () {
-        renderCarrierPrices(host, series);
-      });
-    },
+    'price-history': wirePriceWindows,
+    'weekly-delay': renderWeeklyDelay,
+    'transit-trend': renderTransitTrend,
+    'carrier-prices': renderCarrierPrices,
   };
 
   function boot() {
@@ -1182,6 +1218,12 @@ Chart.register(
         return;
       }
       render(host, read.series);
+      // No chart means the series had nothing to draw: nothing to reveal.
+      if (chartInstances[name]) {
+        whenVisible(host, function () {
+          revealChart(name);
+        });
+      }
     });
 
     window.RouteInsights.status = 'ready';
